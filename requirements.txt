@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-osc
+pydglab-ws
+psutil
+py-cpuinfo
+GPUtil
+WMI; sys_platform == "win32"
+qrcode[pil]
+pyinstaller
