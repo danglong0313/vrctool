@@ -12,7 +12,7 @@ from typing import Optional
 
 import uvicorn
 
-from vrcosc_app.lifecycle import set_shutdown_callback
+from vrctool_app.lifecycle import set_shutdown_callback
 
 CTRL_CLOSE_EVENT = 2
 CTRL_LOGOFF_EVENT = 5

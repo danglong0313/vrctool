@@ -116,7 +116,7 @@ build_exe.bat
 打包结果：
 
 ```text
-dist\VRCOSC.exe
+dist\vrctool.exe
 ```
 
 默认打包为控制台 exe。关闭 exe 窗口时，后端服务会一起关闭。
@@ -126,9 +126,9 @@ dist\VRCOSC.exe
 ```text
 app.py                  FastAPI 后端接口
 launcher.py             启动器，负责窗口生命周期和打开网页
-vrcosc_app/             后端功能模块
+vrctool_app/            后端功能模块
 web/                    网页前端
 requirements.txt        Python 依赖
-VRCOSC.spec             PyInstaller 打包配置
+vrctool.spec            PyInstaller 打包配置
 build_exe.ps1           打包脚本
 ```

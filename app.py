@@ -11,14 +11,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from vrcosc_app.chatbox import ChatboxManager
-from vrcosc_app.config_store import load_config, save_config
-from vrcosc_app.device_info import get_device_info
-from vrcosc_app.dglab import DGLabManager
-from vrcosc_app.lifecycle import request_shutdown
-from vrcosc_app.network import get_network_interfaces, pick_default_lan_ip
-from vrcosc_app.osc import VRChatOSCManager
-from vrcosc_app.state import RuntimeState
+from vrctool_app.chatbox import ChatboxManager
+from vrctool_app.config_store import load_config, save_config
+from vrctool_app.device_info import get_device_info
+from vrctool_app.dglab import DGLabManager
+from vrctool_app.lifecycle import request_shutdown
+from vrctool_app.network import get_network_interfaces, pick_default_lan_ip
+from vrctool_app.osc import VRChatOSCManager
+from vrctool_app.state import RuntimeState
 
 BASE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 WEB_DIR = BASE_DIR / "web"
