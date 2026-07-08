@@ -1,7 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_submodules
 
+
+icon_path = Path("build/logo.ico")
 
 hiddenimports = (
     collect_submodules("uvicorn")
@@ -47,4 +51,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(icon_path) if icon_path.exists() else None,
 )

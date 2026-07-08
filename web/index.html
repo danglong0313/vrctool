@@ -3,265 +3,390 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>VRC OSC 控制台</title>
+    <title>vrctool</title>
     <link rel="stylesheet" href="/static/styles.css" />
     <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
     <script defer src="/static/app.js"></script>
   </head>
   <body>
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">VRChat OSC / ChatBox / DG-LAB</p>
-        <h1>VRC OSC 控制台</h1>
-      </div>
-      <div class="status-strip">
-        <span class="status-pill" id="oscState">OSC</span>
-        <span class="status-pill" id="dglabState">DG-LAB</span>
-        <span class="status-pill" id="bindState">未绑定</span>
-        <button class="icon-button danger" id="shutdownApp" title="关闭后端服务">
-          <i data-lucide="power-off"></i>
-        </button>
-      </div>
-    </header>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="brand-mark">VT</div>
+          <div>
+            <p class="eyebrow">VRChat OSC Toolkit</p>
+            <h1>vrctool</h1>
+          </div>
+        </div>
 
-    <main class="workspace">
-      <section class="panel chat-panel">
-        <div class="panel-head">
-          <h2>ChatBox</h2>
-        </div>
-        <div class="inline-grid">
-          <label>
-            <span>地址</span>
-            <input id="chatHost" value="127.0.0.1" />
-          </label>
-          <label>
-            <span>端口</span>
-            <input id="chatPort" type="number" value="9000" />
-          </label>
-        </div>
-        <label>
-          <span>自定义文字</span>
-          <textarea id="customMessage" rows="5" maxlength="240" placeholder="输入要发送到 VRChat ChatBox 的文字"></textarea>
-        </label>
-        <button class="primary" id="sendMessage">
-          <i data-lucide="message-square-more"></i>
-          开始发送
-        </button>
-      </section>
+        <nav class="section-nav" aria-label="分区选择">
+          <button class="nav-item is-active" type="button" data-section="overview">
+            <i data-lucide="layout-dashboard"></i>
+            总览
+          </button>
+          <button class="nav-item" type="button" data-section="chatbox">
+            <i data-lucide="message-square-text"></i>
+            ChatBox
+          </button>
+          <button class="nav-item" type="button" data-section="dglab">
+            <i data-lucide="activity"></i>
+            郊狼控制
+          </button>
+          <button class="nav-item" type="button" data-section="osc">
+            <i data-lucide="radio"></i>
+            OSC 映射
+          </button>
+          <button class="nav-item" type="button" data-section="logs">
+            <i data-lucide="scroll-text"></i>
+            日志
+          </button>
+        </nav>
 
-      <section class="panel status-panel">
-        <div class="panel-head">
-          <h2>设备 / 挂机</h2>
-          <button class="icon-button ghost" id="refreshDevice" title="刷新设备信息">
-            <i data-lucide="refresh-cw"></i>
-          </button>
-        </div>
-        <div class="metric-grid">
-          <div class="metric">
-            <span>CPU</span>
-            <strong id="cpuUsage">0%</strong>
-            <small id="cpuName">-</small>
-          </div>
-          <div class="metric">
-            <span>GPU</span>
-            <strong id="gpuUsage">0%</strong>
-            <small id="gpuName">-</small>
-          </div>
-          <div class="metric">
-            <span>RAM</span>
-            <strong id="ramUsage">0%</strong>
-            <small id="ramText">-</small>
-          </div>
-        </div>
-        <div class="control-row">
-          <label>
-            <span>设备间隔</span>
-            <input id="deviceInterval" type="number" min="1" step="1" value="3" />
-          </label>
-          <button id="toggleDevice">
-            <i data-lucide="monitor-up"></i>
-            开始发送
-          </button>
-        </div>
-        <div class="control-row">
-          <label>
-            <span>挂机间隔</span>
-            <input id="afkInterval" type="number" min="1" step="1" value="3" />
-          </label>
-          <button id="toggleAfk">
-            <i data-lucide="timer"></i>
-            开始挂机
-          </button>
-          <button class="ghost" id="resetAfk" title="重置挂机时间">
-            <i data-lucide="rotate-ccw"></i>
-          </button>
-        </div>
-        <div class="afk-clock" id="afkClock">00:00:00</div>
-      </section>
-
-      <section class="panel dglab-panel">
-        <div class="panel-head">
-          <h2>DG-LAB</h2>
-          <button class="danger" id="emergencyStop">
-            <i data-lucide="octagon-x"></i>
-            归零
-          </button>
-        </div>
-        <div class="network-line">
-          <label>
-            <span>扫码 IP</span>
-            <select id="netSelect"></select>
-          </label>
-          <label>
-            <span>WS 端口</span>
-            <input id="dglabPort" type="number" value="5678" />
-          </label>
-        </div>
-        <div class="dglab-controls">
-          <div class="toggle-row">
-            <span>波形维护</span>
-            <button class="switch is-on" id="pulseSwitch" aria-pressed="true"></button>
-          </div>
-          <label class="checkbox-row">
-            <input id="dglabChatboxStatus" type="checkbox" />
-            <span>ChatBox 显示郊狼状态</span>
-          </label>
-          <div class="mode-grid">
-            <div>
-              <span>A 模式</span>
-              <div class="segmented">
-                <button id="modeAInteraction" type="button">交互</button>
-                <button id="modeAPanel" type="button">面板</button>
-              </div>
-            </div>
-            <div>
-              <span>B 模式</span>
-              <div class="segmented">
-                <button id="modeBInteraction" type="button">交互</button>
-                <button id="modeBPanel" type="button">面板</button>
-              </div>
-            </div>
-          </div>
-          <div class="panel-settings">
-            <label class="checkbox-row">
-              <input id="panelEnabled" type="checkbox" />
-              <span>VRChat 面板控制</span>
-            </label>
-            <label>
-              <span>开火强度</span>
-              <input id="fireStep" type="number" min="0" max="200" value="30" />
-            </label>
-            <label>
-              <span>增减步进</span>
-              <input id="adjustStep" type="number" min="1" max="100" value="5" />
-            </label>
-          </div>
-          <div class="dual-sliders">
-            <div>
-              <label class="range-label">
-                <span>A 强度</span>
-                <strong id="strengthAValue">0</strong>
-              </label>
-              <input id="strengthA" type="range" min="0" max="60" value="0" />
-              <select id="waveformA"></select>
-            </div>
-            <div>
-              <label class="range-label">
-                <span>B 强度</span>
-                <strong id="strengthBValue">0</strong>
-              </label>
-              <input id="strengthB" type="range" min="0" max="60" value="0" />
-              <select id="waveformB"></select>
-            </div>
-          </div>
-          <div class="inline-grid">
-            <label>
-              <span>A 上限</span>
-              <input id="limitA" type="number" min="0" max="100" value="60" />
-            </label>
-            <label>
-              <span>B 上限</span>
-              <input id="limitB" type="number" min="0" max="100" value="60" />
-            </label>
-          </div>
-        </div>
-        <div class="dglab-connect-row">
-          <button class="primary" id="toggleDglab">
-            <i data-lucide="plug-zap"></i>
-            连接设备
-          </button>
-        </div>
-      </section>
-
-      <section class="panel osc-panel">
-        <div class="panel-head">
-          <h2>OSC 映射</h2>
-        </div>
-        <div class="inline-grid osc-port">
-          <label>
-            <span>监听地址</span>
-            <input id="oscHost" value="127.0.0.1" />
-          </label>
-          <label>
-            <span>端口</span>
-            <input id="oscPort" type="number" value="9001" />
-          </label>
-          <label>
-            <span>阈值</span>
-            <input id="oscThreshold" type="number" min="0" max="0.95" step="0.01" value="0.02" />
-          </label>
-        </div>
-        <label>
-          <span>A 通道参数</span>
-          <input id="addressA" value="/avatar/parameters/DG-LAB/UpperLeg_L" />
-        </label>
-        <label>
-          <span>B 通道参数</span>
-          <input id="addressB" value="/avatar/parameters/DG-LAB/UpperLeg_R" />
-        </label>
-        <div class="custom-osc">
-          <div class="custom-osc-form">
-            <label>
-              <span>自定义 OSC 参数</span>
-              <input id="customOscAddress" placeholder="/avatar/parameters/YourParameter" />
-            </label>
-            <label>
-              <span>通道</span>
-              <select id="customOscChannel">
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="A+B">A+B</option>
-              </select>
-            </label>
-            <label class="checkbox-row">
-              <input id="customOscEnabled" type="checkbox" checked />
-              <span>生效</span>
-            </label>
-            <button id="addCustomOsc">
-              <i data-lucide="plus"></i>
-              添加
+        <section class="side-card">
+          <div class="side-card-head">
+            <span>运行状态</span>
+            <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换深浅色">
+              <i data-lucide="sun-medium"></i>
             </button>
           </div>
-          <div class="custom-osc-list" id="customOscList"></div>
-        </div>
-        <div class="last-osc-row">
-          <span class="last-osc" id="lastOsc">-</span>
-        </div>
-      </section>
+          <div class="status-list">
+            <span class="status-pill" id="oscState">OSC</span>
+            <span class="status-pill" id="dglabState">DG-LAB</span>
+            <span class="status-pill" id="bindState">未绑定</span>
+          </div>
+        </section>
 
-      <section class="panel log-panel">
-        <div class="panel-head">
-          <h2>日志</h2>
-          <span class="mini" id="lastMessage">-</span>
-        </div>
-        <div class="log-list" id="logList"></div>
-      </section>
-    </main>
+        <section class="side-card">
+          <div class="side-card-head">
+            <span>基础设置</span>
+            <button class="icon-button ghost" id="refreshDevice" title="刷新设备信息">
+              <i data-lucide="refresh-cw"></i>
+            </button>
+          </div>
+          <div class="compact-form">
+            <label>
+              <span>ChatBox 地址</span>
+              <input id="chatHost" value="127.0.0.1" />
+            </label>
+            <label>
+              <span>ChatBox 端口</span>
+              <input id="chatPort" type="number" value="9000" />
+            </label>
+            <label>
+              <span>设备间隔</span>
+              <input id="deviceInterval" type="number" min="1" step="1" value="3" />
+            </label>
+            <label>
+              <span>挂机间隔</span>
+              <input id="afkInterval" type="number" min="1" step="1" value="3" />
+            </label>
+          </div>
+        </section>
+
+        <button class="shutdown-button" id="shutdownApp" title="关闭后端服务">
+          <i data-lucide="power-off"></i>
+          关闭服务
+        </button>
+      </aside>
+
+      <main class="workspace">
+        <section class="hero-console">
+          <div>
+            <p class="eyebrow">Live Control Surface</p>
+            <h2 id="sectionTitle">总览</h2>
+          </div>
+          <div class="hero-actions">
+            <span class="mini">最近发送</span>
+            <strong id="lastMessage">-</strong>
+          </div>
+        </section>
+
+        <section class="section-page is-active" data-page="overview">
+          <div class="metric-grid">
+            <div class="metric gradient-a">
+              <span>CPU</span>
+              <strong id="cpuUsage">0%</strong>
+              <small id="cpuName">-</small>
+            </div>
+            <div class="metric gradient-b">
+              <span>GPU</span>
+              <strong id="gpuUsage">0%</strong>
+              <small id="gpuName">-</small>
+            </div>
+            <div class="metric gradient-c">
+              <span>RAM</span>
+              <strong id="ramUsage">0%</strong>
+              <small id="ramText">-</small>
+            </div>
+          </div>
+
+          <div class="panel-grid two">
+            <section class="task-card">
+              <div class="panel-head">
+                <h3>快速发送</h3>
+                <span class="chip">3s 刷新</span>
+              </div>
+              <label>
+                <span>自定义文字</span>
+                <textarea id="customMessage" rows="5" maxlength="240" placeholder="输入要循环发送到 VRChat ChatBox 的文字"></textarea>
+              </label>
+              <button class="primary" id="sendMessage">
+                <i data-lucide="message-square-more"></i>
+                开始发送
+              </button>
+            </section>
+
+            <section class="task-card">
+              <div class="panel-head">
+                <h3>设备 / 挂机</h3>
+                <span class="afk-clock" id="afkClock">00:00:00</span>
+              </div>
+              <div class="action-grid">
+                <button id="toggleDevice">
+                  <i data-lucide="monitor-up"></i>
+                  开始发送
+                </button>
+                <button id="toggleAfk">
+                  <i data-lucide="timer"></i>
+                  开始挂机
+                </button>
+                <button class="ghost" id="resetAfk" title="重置挂机时间">
+                  <i data-lucide="rotate-ccw"></i>
+                  重置
+                </button>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="section-page" data-page="chatbox">
+          <section class="task-card wide">
+            <div class="panel-head">
+              <h3>ChatBox 文本</h3>
+              <span class="chip">持续发送</span>
+            </div>
+            <label>
+              <span>自定义文字</span>
+              <textarea id="customMessageMirror" rows="8" maxlength="240" placeholder="这里会同步上方文本"></textarea>
+            </label>
+            <div class="action-grid">
+              <button class="primary" id="sendMessageMirror">
+                <i data-lucide="message-square-more"></i>
+                开始发送
+              </button>
+              <button id="toggleDeviceMirror">
+                <i data-lucide="monitor-up"></i>
+                设备信息
+              </button>
+              <button id="toggleAfkMirror">
+                <i data-lucide="timer"></i>
+                挂机计时
+              </button>
+            </div>
+          </section>
+        </section>
+
+        <section class="section-page" data-page="dglab">
+          <div class="dglab-layout">
+            <section class="task-card visual-card">
+              <div class="panel-head">
+                <h3>强度可视化</h3>
+                <button class="danger" id="emergencyStop">
+                  <i data-lucide="octagon-x"></i>
+                  归零
+                </button>
+              </div>
+              <div class="ring-grid">
+                <div class="strength-ring" id="ringA">
+                  <div class="ring-core">
+                    <span>A</span>
+                    <strong id="strengthAValue">0</strong>
+                    <small id="ringALimit">/ 60</small>
+                  </div>
+                </div>
+                <div class="strength-ring ring-b" id="ringB">
+                  <div class="ring-core">
+                    <span>B</span>
+                    <strong id="strengthBValue">0</strong>
+                    <small id="ringBLimit">/ 60</small>
+                  </div>
+                </div>
+              </div>
+              <div class="dglab-connect-row">
+                <button class="primary" id="toggleDglab">
+                  <i data-lucide="plug-zap"></i>
+                  连接设备
+                </button>
+              </div>
+            </section>
+
+            <section class="task-card">
+              <div class="panel-head">
+                <h3>连接与模式</h3>
+                <span class="chip">DG-LAB</span>
+              </div>
+              <div class="inline-grid network-line">
+                <label>
+                  <span>扫码 IP</span>
+                  <select id="netSelect"></select>
+                </label>
+                <label>
+                  <span>WS 端口</span>
+                  <input id="dglabPort" type="number" value="5678" />
+                </label>
+              </div>
+              <div class="toggle-row">
+                <span>波形维护</span>
+                <button class="switch is-on" id="pulseSwitch" aria-pressed="true"></button>
+              </div>
+              <label class="checkbox-row">
+                <input id="dglabChatboxStatus" type="checkbox" />
+                <span>ChatBox 显示郊狼状态</span>
+              </label>
+              <div class="mode-grid">
+                <div>
+                  <span>A 模式</span>
+                  <div class="segmented">
+                    <button id="modeAInteraction" type="button">交互</button>
+                    <button id="modeAPanel" type="button">面板</button>
+                  </div>
+                </div>
+                <div>
+                  <span>B 模式</span>
+                  <div class="segmented">
+                    <button id="modeBInteraction" type="button">交互</button>
+                    <button id="modeBPanel" type="button">面板</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="task-card wide">
+              <div class="panel-head">
+                <h3>通道控制</h3>
+                <span class="chip">实时</span>
+              </div>
+              <div class="panel-settings">
+                <label class="checkbox-row">
+                  <input id="panelEnabled" type="checkbox" />
+                  <span>VRChat 面板控制</span>
+                </label>
+                <label>
+                  <span>开火强度</span>
+                  <input id="fireStep" type="number" min="0" max="200" value="30" />
+                </label>
+                <label>
+                  <span>增减步进</span>
+                  <input id="adjustStep" type="number" min="1" max="100" value="5" />
+                </label>
+              </div>
+              <div class="dual-sliders">
+                <div class="channel-strip">
+                  <label class="range-label">
+                    <span>A 强度</span>
+                    <strong id="strengthAInline">0</strong>
+                  </label>
+                  <input id="strengthA" type="range" min="0" max="60" value="0" />
+                  <select id="waveformA"></select>
+                </div>
+                <div class="channel-strip">
+                  <label class="range-label">
+                    <span>B 强度</span>
+                    <strong id="strengthBInline">0</strong>
+                  </label>
+                  <input id="strengthB" type="range" min="0" max="60" value="0" />
+                  <select id="waveformB"></select>
+                </div>
+              </div>
+              <div class="inline-grid">
+                <label>
+                  <span>A 上限</span>
+                  <input id="limitA" type="number" min="0" max="100" value="60" />
+                </label>
+                <label>
+                  <span>B 上限</span>
+                  <input id="limitB" type="number" min="0" max="100" value="60" />
+                </label>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="section-page" data-page="osc">
+          <section class="task-card wide">
+            <div class="panel-head">
+              <h3>OSC 映射</h3>
+              <span class="last-osc" id="lastOsc">-</span>
+            </div>
+            <div class="inline-grid osc-port">
+              <label>
+                <span>监听地址</span>
+                <input id="oscHost" value="127.0.0.1" />
+              </label>
+              <label>
+                <span>端口</span>
+                <input id="oscPort" type="number" value="9001" />
+              </label>
+              <label>
+                <span>阈值</span>
+                <input id="oscThreshold" type="number" min="0" max="0.95" step="0.01" value="0.02" />
+              </label>
+            </div>
+            <div class="inline-grid">
+              <label>
+                <span>A 通道参数</span>
+                <input id="addressA" value="/avatar/parameters/DG-LAB/UpperLeg_L" />
+              </label>
+              <label>
+                <span>B 通道参数</span>
+                <input id="addressB" value="/avatar/parameters/DG-LAB/UpperLeg_R" />
+              </label>
+            </div>
+            <div class="custom-osc">
+              <div class="custom-osc-form">
+                <label>
+                  <span>自定义 OSC 参数</span>
+                  <input id="customOscAddress" placeholder="/avatar/parameters/YourParameter" />
+                </label>
+                <label>
+                  <span>通道</span>
+                  <select id="customOscChannel">
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="A+B">A+B</option>
+                  </select>
+                </label>
+                <label class="checkbox-row">
+                  <input id="customOscEnabled" type="checkbox" checked />
+                  <span>生效</span>
+                </label>
+                <button id="addCustomOsc">
+                  <i data-lucide="plus"></i>
+                  添加
+                </button>
+              </div>
+              <div class="custom-osc-list" id="customOscList"></div>
+            </div>
+          </section>
+        </section>
+
+        <section class="section-page" data-page="logs">
+          <section class="task-card wide log-panel">
+            <div class="panel-head">
+              <h3>日志</h3>
+              <span class="mini">最近 80 条</span>
+            </div>
+            <div class="log-list" id="logList"></div>
+          </section>
+        </section>
+      </main>
+    </div>
+
     <div class="modal" id="qrModal" aria-hidden="true">
       <button class="modal-backdrop" id="closeQrModal" aria-label="关闭二维码"></button>
       <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="qrModalTitle">
         <div class="panel-head">
-          <h2 id="qrModalTitle">连接设备</h2>
+          <h3 id="qrModalTitle">连接设备</h3>
           <button class="icon-button ghost" id="dismissQrModal" title="关闭">
             <i data-lucide="x"></i>
           </button>

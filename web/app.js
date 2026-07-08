@@ -4,6 +4,13 @@ let currentState = null;
 let pulseEnabled = true;
 let qrModalOpen = false;
 const debounceTimers = new Map();
+const sectionTitles = {
+  overview: "总览",
+  chatbox: "ChatBox",
+  dglab: "郊狼控制",
+  osc: "OSC 映射",
+  logs: "日志",
+};
 
 async function api(path, payload = null) {
   const options = payload
@@ -57,6 +64,18 @@ function closeQrModal() {
   $("qrModal").setAttribute("aria-hidden", "true");
 }
 
+function setTheme(theme) {
+  const nextTheme = theme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = nextTheme;
+  localStorage.setItem("vrctool-theme", nextTheme);
+  const icon = nextTheme === "light" ? "moon" : "sun-medium";
+  const button = $("themeToggle");
+  if (button) {
+    button.innerHTML = `<i data-lucide="${icon}"></i>`;
+  }
+  if (window.lucide) window.lucide.createIcons();
+}
+
 function setPill(el, active, goodText, badText) {
   el.textContent = active ? goodText : badText;
   el.classList.toggle("is-good", Boolean(active));
@@ -102,6 +121,33 @@ function setDglabConnectButton(dglab) {
     : '<i data-lucide="plug-zap"></i>连接设备';
   if (connected && qrModalOpen) {
     closeQrModal();
+  }
+}
+
+function updateStrengthVisuals(dglab) {
+  const limitA = Math.max(1, Number(dglab.safety_limit_a || 1));
+  const limitB = Math.max(1, Number(dglab.safety_limit_b || 1));
+  const percentA = Math.max(0, Math.min(100, (Number(dglab.strength_a || 0) / limitA) * 100));
+  const percentB = Math.max(0, Math.min(100, (Number(dglab.strength_b || 0) / limitB) * 100));
+  $("ringA").style.setProperty("--percent", `${percentA}%`);
+  $("ringB").style.setProperty("--percent", `${percentB}%`);
+  $("ringALimit").textContent = `/ ${dglab.safety_limit_a}`;
+  $("ringBLimit").textContent = `/ ${dglab.safety_limit_b}`;
+  $("strengthAInline").textContent = dglab.strength_a;
+  $("strengthBInline").textContent = dglab.strength_b;
+}
+
+function switchSection(section, updateHash = true) {
+  const target = sectionTitles[section] ? section : "overview";
+  document.querySelectorAll(".nav-item").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.section === target);
+  });
+  document.querySelectorAll(".section-page").forEach((page) => {
+    page.classList.toggle("is-active", page.dataset.page === target);
+  });
+  $("sectionTitle").textContent = sectionTitles[target];
+  if (updateHash && location.hash.slice(1) !== target) {
+    history.replaceState(null, "", `#${target}`);
   }
 }
 
@@ -172,9 +218,17 @@ function render(state) {
     ? '<i data-lucide="square"></i>停止挂机'
     : '<i data-lucide="timer"></i>开始挂机';
   setValueUnlessFocused("customMessage", chatbox.custom_message || "");
+  setValueUnlessFocused("customMessageMirror", chatbox.custom_message || "");
   $("sendMessage").innerHTML = chatbox.custom_enabled
     ? '<i data-lucide="square"></i>停止发送'
     : '<i data-lucide="message-square-more"></i>开始发送';
+  $("sendMessageMirror").innerHTML = $("sendMessage").innerHTML;
+  $("toggleDeviceMirror").innerHTML = chatbox.device_enabled
+    ? '<i data-lucide="square"></i>停止设备信息'
+    : '<i data-lucide="monitor-up"></i>设备信息';
+  $("toggleAfkMirror").innerHTML = chatbox.afk_enabled
+    ? '<i data-lucide="square"></i>停止挂机'
+    : '<i data-lucide="timer"></i>挂机计时';
   $("dglabChatboxStatus").checked = Boolean(chatbox.dglab_enabled);
 
   if (device.cpu) {
@@ -205,6 +259,7 @@ function render(state) {
   $("strengthB").value = dglab.strength_b;
   $("strengthAValue").textContent = dglab.strength_a;
   $("strengthBValue").textContent = dglab.strength_b;
+  updateStrengthVisuals(dglab);
   $("limitA").max = dglab.limit_a;
   $("limitB").max = dglab.limit_b;
   setValueUnlessFocused("limitA", Math.min(dglab.safety_limit_a, dglab.limit_a));
@@ -320,16 +375,36 @@ function bindEvents() {
       };
     });
 
+  document.querySelectorAll(".nav-item").forEach((button) => {
+    button.addEventListener("click", () => switchSection(button.dataset.section));
+  });
+  window.addEventListener("hashchange", () =>
+    switchSection(location.hash.slice(1) || "overview", false),
+  );
+  $("themeToggle").addEventListener("click", () =>
+    setTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light"),
+  );
+
   $("chatHost").addEventListener("input", syncChatboxConfig);
   $("chatPort").addEventListener("input", syncChatboxConfig);
   $("deviceInterval").addEventListener("input", syncDeviceInterval);
   $("afkInterval").addEventListener("input", syncAfkInterval);
-  $("customMessage").addEventListener("input", () =>
+  const syncCustomMessage = (sourceId, mirrorId) => {
+    const value = $(sourceId).value;
+    if (document.activeElement !== $(mirrorId)) {
+      $(mirrorId).value = value;
+    }
     postDebounced("custom-message", "/api/chatbox/custom", () => ({
       enabled: Boolean(currentState?.chatbox?.custom_enabled),
       interval: 3,
-      message: $("customMessage").value,
-    })),
+      message: value,
+    }));
+  };
+  $("customMessage").addEventListener("input", () =>
+    syncCustomMessage("customMessage", "customMessageMirror"),
+  );
+  $("customMessageMirror").addEventListener("input", () =>
+    syncCustomMessage("customMessageMirror", "customMessage"),
   );
 
   $("shutdownApp").addEventListener("click", async () => {
@@ -339,15 +414,20 @@ function bindEvents() {
     await fetch("/api/app/shutdown", { method: "POST" }).catch(() => {});
   });
 
-  $("sendMessage").addEventListener("click", () => {
-    const message = $("customMessage").value;
+  const toggleCustomMessage = () => {
+    const message =
+      document.activeElement === $("customMessageMirror")
+        ? $("customMessageMirror").value
+        : $("customMessage").value;
     if (!currentState?.chatbox?.custom_enabled && !message.trim()) return;
     api("/api/chatbox/custom", {
       enabled: !currentState?.chatbox?.custom_enabled,
       interval: 3,
       message,
     });
-  });
+  };
+  $("sendMessage").addEventListener("click", toggleCustomMessage);
+  $("sendMessageMirror").addEventListener("click", toggleCustomMessage);
 
   $("toggleDevice").addEventListener("click", () =>
     api("/api/chatbox/device", {
@@ -355,6 +435,7 @@ function bindEvents() {
       interval: Number($("deviceInterval").value),
     }),
   );
+  $("toggleDeviceMirror").addEventListener("click", () => $("toggleDevice").click());
 
   $("toggleAfk").addEventListener("click", () =>
     api("/api/chatbox/afk", {
@@ -362,6 +443,7 @@ function bindEvents() {
       interval: Number($("afkInterval").value),
     }),
   );
+  $("toggleAfkMirror").addEventListener("click", () => $("toggleAfk").click());
 
   $("resetAfk").addEventListener("click", () => api("/api/chatbox/afk/reset", {}));
   $("refreshDevice").addEventListener("click", () => api("/api/device/refresh", {}));
@@ -485,7 +567,10 @@ function connectStatusSocket() {
 }
 
 async function boot() {
+  const themeFromUrl = new URLSearchParams(location.search).get("theme");
+  setTheme(themeFromUrl || localStorage.getItem("vrctool-theme") || "dark");
   bindEvents();
+  switchSection(location.hash.slice(1) || "overview", false);
   await loadNetwork();
   await api("/api/status");
   connectStatusSocket();

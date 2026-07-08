@@ -14,7 +14,7 @@ class RuntimeState:
         self._logs: Deque[Dict[str, Any]] = deque(maxlen=300)
         self.data: Dict[str, Any] = {
             "app": {
-                "name": "VRC OSC 控制台",
+                "name": "vrctool",
                 "started_at": now,
             },
             "chatbox": {

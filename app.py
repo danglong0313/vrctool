@@ -23,7 +23,7 @@ from vrctool_app.state import RuntimeState
 BASE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 WEB_DIR = BASE_DIR / "web"
 
-app = FastAPI(title="VRC OSC Controller")
+app = FastAPI(title="vrctool")
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
 state = RuntimeState()

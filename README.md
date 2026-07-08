@@ -1,4 +1,4 @@
-# VRC Tool
+# vrctool
 
 一个网页形式运行的 VRChat OSC 工具，集成 ChatBox 文本发送、硬件信息发送、挂机计时、DG-LAB 郊狼 3.0 WebSocket 联动和自定义 OSC 映射。
 
@@ -13,6 +13,8 @@
 - OSC 映射：支持默认 A/B 参数，也支持自定义 OSC 参数。
 - 自定义 OSC 参数可选择 A、B、A+B 通道，并可用勾选框控制是否生效。
 - 配置自动保存到 `config.json`，重启后继续生效。
+- 控制台式网页界面：左侧分区导航和基础设置，右侧任务工作区，支持浅色/深色主题切换。
+- 郊狼强度环形可视化，会随 A/B 通道强度实时变化。
 
 ## 环境
 
@@ -118,6 +120,8 @@ build_exe.bat
 ```text
 dist\vrctool.exe
 ```
+
+如果项目根目录存在 `logo.png`，打包脚本会自动生成 `build\logo.ico` 并作为 exe 图标。
 
 默认打包为控制台 exe。关闭 exe 窗口时，后端服务会一起关闭。
 

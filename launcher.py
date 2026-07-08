@@ -12,6 +12,7 @@ from typing import Optional
 
 import uvicorn
 
+from app import app as asgi_app
 from vrctool_app.lifecycle import set_shutdown_callback
 
 CTRL_CLOSE_EVENT = 2
@@ -66,7 +67,7 @@ def install_signal_handlers() -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="VRC OSC 网页控制台启动器")
+    parser = argparse.ArgumentParser(description="vrctool 网页控制台启动器")
     parser.add_argument("--host", default="127.0.0.1", help="网页服务监听地址")
     parser.add_argument("--port", default=8765, type=int, help="网页服务端口")
     parser.add_argument("--no-browser", action="store_true", help="启动后不自动打开浏览器")
@@ -79,7 +80,7 @@ def main() -> int:
     url = f"http://{args.host}:{args.port}"
 
     config = uvicorn.Config(
-        "app:app",
+        asgi_app,
         host=args.host,
         port=args.port,
         log_level="info",
@@ -89,7 +90,7 @@ def main() -> int:
     set_shutdown_callback(lambda: request_server_stop("网页请求关闭"))
     install_signal_handlers()
 
-    print("VRC OSC 控制台正在启动")
+    print("vrctool 正在启动")
     print(f"网页地址：{url}")
     print("关闭方式：在这个窗口按 Ctrl+C，或直接关闭这个窗口，后端会一起退出。")
 
