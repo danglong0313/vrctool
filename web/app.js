@@ -204,8 +204,8 @@ function render(state) {
   const { chatbox, device, afk, dglab, osc, logs } = state;
 
   setPill($("oscState"), osc.running, "OSC 运行", "OSC 停止");
-  setPill($("dglabState"), dglab.running, "DG-LAB 运行", "DG-LAB 停止");
-  setPill($("bindState"), dglab.bound, "已绑定", "未绑定");
+  setPill($("dglabState"), dglab.running, "DG-LAB 组件运行", "DG-LAB 组件停止");
+  setPill($("bindState"), dglab.bound, "已连接", "未连接");
 
   setValueUnlessFocused("chatHost", chatbox.host);
   setValueUnlessFocused("chatPort", chatbox.port);
@@ -272,6 +272,8 @@ function render(state) {
   setValueUnlessFocused("oscThreshold", osc.threshold);
   setValueUnlessFocused("addressA", osc.address_a);
   setValueUnlessFocused("addressB", osc.address_b);
+  setValueUnlessFocused("addressAChannel", osc.channel_a || "A");
+  setValueUnlessFocused("addressBChannel", osc.channel_b || "B");
   $("lastOsc").textContent = osc.last_address
     ? `${osc.last_channel || "-"} ${osc.last_value} -> ${osc.last_strength}`
     : "-";
@@ -371,6 +373,8 @@ function bindEvents() {
         enabled: true,
         address_a: $("addressA").value,
         address_b: $("addressB").value,
+        channel_a: $("addressAChannel").value,
+        channel_b: $("addressBChannel").value,
         threshold,
       };
     });
@@ -545,6 +549,8 @@ function bindEvents() {
   $("oscPort").addEventListener("input", syncOscListener);
   $("addressA").addEventListener("input", syncOscConfig);
   $("addressB").addEventListener("input", syncOscConfig);
+  $("addressAChannel").addEventListener("change", syncOscConfig);
+  $("addressBChannel").addEventListener("change", syncOscConfig);
   $("oscThreshold").addEventListener("input", syncOscConfig);
   $("addCustomOsc").addEventListener("click", () => {
     const address = $("customOscAddress").value.trim();

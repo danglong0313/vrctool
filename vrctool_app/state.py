@@ -73,6 +73,8 @@ class RuntimeState:
                 "enabled": True,
                 "address_a": "/avatar/parameters/DG-LAB/UpperLeg_L",
                 "address_b": "/avatar/parameters/DG-LAB/UpperLeg_R",
+                "channel_a": "A",
+                "channel_b": "B",
                 "threshold": 0.02,
                 "custom_mappings": [],
                 "last_address": "",

@@ -118,7 +118,7 @@ class DGLabManager:
     def _on_connect(self, _uuid, _websocket) -> None:
         snapshot = self.state.snapshot()["dglab"]
         self.state.patch("dglab", app_connections=int(snapshot["app_connections"]) + 1)
-        self.state.log("info", "DG-LAB App 已连接 WebSocket，等待绑定")
+        self.state.log("info", "DG-LAB App 已连接 WebSocket，等待设备连接")
 
     def _on_disconnect(self, _uuid, _websocket) -> None:
         snapshot = self.state.snapshot()["dglab"]
@@ -140,7 +140,7 @@ class DGLabManager:
                             bound=True,
                             target_id=str(self.client.target_id),
                         )
-                        self.state.log("ok", "DG-LAB App 绑定成功")
+                        self.state.log("ok", "DG-LAB App 连接成功")
                 else:
                     data = await self.client.recv_data()
                     if isinstance(data, StrengthData):
@@ -157,7 +157,7 @@ class DGLabManager:
                     elif data == RetCode.CLIENT_DISCONNECTED:
                         self.client._target_id = None
                         self.state.patch("dglab", bound=False, target_id="")
-                        self.state.log("warn", "DG-LAB App 已断开绑定")
+                        self.state.log("warn", "DG-LAB App 已断开连接")
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -176,7 +176,7 @@ class DGLabManager:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                self.state.log("err", f"波形维护异常：{exc}")
+                self.state.log("err", f"持续输出波形异常：{exc}")
                 await asyncio.sleep(1)
 
     async def _send_waveform(self, channel_name: str) -> None:
@@ -198,7 +198,7 @@ class DGLabManager:
     async def _set_strength_value(self, channel_name: str, value: int, source: str) -> Dict[str, object]:
         if not self._is_bound():
             if source != "OSC":
-                self.state.log("warn", "DG-LAB 尚未绑定，强度未下发")
+                self.state.log("warn", "DG-LAB 尚未连接，强度未下发")
             return {"ok": False, "error": "dglab_not_bound"}
 
         dglab = self.state.snapshot()["dglab"]
@@ -311,11 +311,11 @@ class DGLabManager:
         if enabled:
             await self._send_waveform("A")
             await self._send_waveform("B")
-            self.state.log("ok", "波形维护已开启")
+            self.state.log("ok", "持续输出波形已开启")
         else:
             await self.client.clear_pulses(Channel.A)
             await self.client.clear_pulses(Channel.B)
-            self.state.log("warn", "波形维护已关闭")
+            self.state.log("warn", "持续输出波形已关闭")
 
     async def emergency_stop(self) -> None:
         await self._zero_strength(clear_pulses=True)

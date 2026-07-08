@@ -15,6 +15,7 @@ hiddenimports = (
 
 datas = [
     ("web", "web"),
+    ("logo.png", "."),
 ]
 
 a = Analysis(

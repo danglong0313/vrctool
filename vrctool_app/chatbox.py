@@ -162,7 +162,7 @@ def format_dglab_message(snapshot: dict) -> str:
         if "value" in item and "label" in item
     }
     running = "运行中" if dglab["running"] else "已停止"
-    bound = "已绑定" if dglab["bound"] else "未绑定"
+    bound = "已连接" if dglab["bound"] else "未连接"
     osc_state = "运行中" if osc["running"] else "已停止"
     wave_a = waveforms.get(dglab["waveform_a"], dglab["waveform_a"])
     wave_b = waveforms.get(dglab["waveform_b"], dglab["waveform_b"])

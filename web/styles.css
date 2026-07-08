@@ -194,21 +194,25 @@ h3 {
 
 .brand-block {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
+  grid-template-columns: 1fr;
 }
 
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
+  width: 100%;
+  height: 82px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
-  color: var(--ink);
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  font-weight: 800;
+  background:
+    url("/logo.png?v=20260708-logo-8") center center / 100% auto no-repeat,
+    color-mix(in srgb, var(--panel-solid) 34%, transparent);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.16);
+  overflow: hidden;
+}
+
+.brand-mark img {
+  display: none;
 }
 
 .eyebrow,
@@ -656,6 +660,17 @@ input[type="range"] {
   gap: 10px;
 }
 
+.osc-map-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 112px minmax(220px, 1fr) 112px;
+  gap: 10px;
+  align-items: end;
+}
+
+.osc-address-field {
+  min-width: 0;
+}
+
 .custom-osc-form {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) 100px auto auto;
@@ -842,6 +857,7 @@ input[type="range"] {
   .dual-sliders,
   .panel-settings,
   .osc-port,
+  .osc-map-grid,
   .custom-osc-form,
   .ring-grid {
     grid-template-columns: 1fr;

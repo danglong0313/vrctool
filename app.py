@@ -38,7 +38,7 @@ vrchat_osc = VRChatOSCManager(state, dglab, chatbox)
 @app.middleware("http")
 async def disable_ui_cache(request, call_next):
     response = await call_next(request)
-    if request.url.path == "/" or request.url.path.startswith("/static/"):
+    if request.url.path == "/" or request.url.path == "/logo.png" or request.url.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-store, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
@@ -119,6 +119,8 @@ class OSCConfigPayload(BaseModel):
     enabled: bool = True
     address_a: str = "/avatar/parameters/DG-LAB/UpperLeg_L"
     address_b: str = "/avatar/parameters/DG-LAB/UpperLeg_R"
+    channel_a: str = "A"
+    channel_b: str = "B"
     threshold: float = 0.02
 
 
@@ -167,6 +169,11 @@ async def shutdown() -> None:
 @app.get("/")
 async def index() -> FileResponse:
     return FileResponse(WEB_DIR / "index.html")
+
+
+@app.get("/logo.png")
+async def logo() -> FileResponse:
+    return FileResponse(BASE_DIR / "logo.png", media_type="image/png")
 
 
 @app.get("/api/status")
@@ -371,12 +378,21 @@ async def stop_osc():
 
 @app.post("/api/osc/config")
 async def configure_osc(payload: OSCConfigPayload):
-    vrchat_osc.configure(payload.enabled, payload.address_a, payload.address_b, payload.threshold)
+    vrchat_osc.configure(
+        payload.enabled,
+        payload.address_a,
+        payload.address_b,
+        payload.threshold,
+        payload.channel_a,
+        payload.channel_b,
+    )
     update_config(
         "osc",
         enabled=payload.enabled,
         address_a=payload.address_a,
         address_b=payload.address_b,
+        channel_a=state.snapshot()["osc"]["channel_a"],
+        channel_b=state.snapshot()["osc"]["channel_b"],
         threshold=state.snapshot()["osc"]["threshold"],
     )
     return state.snapshot()
@@ -398,14 +414,17 @@ async def add_custom_osc(payload: CustomOSCPayload):
         "channel": channel,
         "enabled": bool(payload.enabled),
     }
-    custom_mappings = list(state.snapshot()["osc"].get("custom_mappings", []))
+    snapshot = state.snapshot()["osc"]
+    custom_mappings = list(snapshot.get("custom_mappings", []))
     custom_mappings.append(mapping)
     vrchat_osc.configure(
-        state.snapshot()["osc"]["enabled"],
-        state.snapshot()["osc"]["address_a"],
-        state.snapshot()["osc"]["address_b"],
-        state.snapshot()["osc"]["threshold"],
-        custom_mappings,
+        snapshot["enabled"],
+        snapshot["address_a"],
+        snapshot["address_b"],
+        snapshot["threshold"],
+        channel_a=snapshot.get("channel_a", "A"),
+        channel_b=snapshot.get("channel_b", "B"),
+        custom_mappings=custom_mappings,
     )
     update_config("osc", custom_mappings=custom_mappings)
     return state.snapshot()
@@ -424,7 +443,9 @@ async def remove_custom_osc(payload: CustomOSCRemovePayload):
         snapshot["address_a"],
         snapshot["address_b"],
         snapshot["threshold"],
-        custom_mappings,
+        channel_a=snapshot.get("channel_a", "A"),
+        channel_b=snapshot.get("channel_b", "B"),
+        custom_mappings=custom_mappings,
     )
     update_config("osc", custom_mappings=custom_mappings)
     return state.snapshot()
@@ -444,7 +465,9 @@ async def update_custom_osc(payload: CustomOSCUpdatePayload):
         snapshot["address_a"],
         snapshot["address_b"],
         snapshot["threshold"],
-        custom_mappings,
+        channel_a=snapshot.get("channel_a", "A"),
+        channel_b=snapshot.get("channel_b", "B"),
+        custom_mappings=custom_mappings,
     )
     update_config("osc", custom_mappings=custom_mappings)
     return state.snapshot()

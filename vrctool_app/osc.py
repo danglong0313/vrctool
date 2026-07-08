@@ -50,6 +50,8 @@ class VRChatOSCManager:
         address_a: str,
         address_b: str,
         threshold: float,
+        channel_a: str | None = None,
+        channel_b: str | None = None,
         custom_mappings: list[dict[str, Any]] | None = None,
     ) -> None:
         values = {
@@ -58,6 +60,10 @@ class VRChatOSCManager:
             "address_b": address_b,
             "threshold": max(0.0, min(float(threshold), 0.95)),
         }
+        if channel_a is not None:
+            values["channel_a"] = self._normalize_channel(channel_a)
+        if channel_b is not None:
+            values["channel_b"] = self._normalize_channel(channel_b)
         if custom_mappings is not None:
             values["custom_mappings"] = custom_mappings
         self.state.patch(
@@ -82,18 +88,13 @@ class VRChatOSCManager:
                     value = 0.0
 
         channels: list[str] = []
-        if address == osc["address_a"]:
-            channels.append("A")
-        elif address == osc["address_b"]:
-            channels.append("B")
+        for address_key, channel_key in (("address_a", "channel_a"), ("address_b", "channel_b")):
+            if address == osc.get(address_key):
+                channels.extend(self._expand_channel(osc.get(channel_key, "A")))
         for mapping in osc.get("custom_mappings", []):
             if not mapping.get("enabled", True) or mapping.get("address") != address:
                 continue
-            mapped_channel = str(mapping.get("channel", "A")).upper()
-            if mapped_channel in {"A", "B"}:
-                channels.append(mapped_channel)
-            elif mapped_channel in {"AB", "A+B", "BOTH"}:
-                channels.extend(["A", "B"])
+            channels.extend(self._expand_channel(mapping.get("channel", "A")))
         channels = list(dict.fromkeys(channels))
 
         self.state.patch(
@@ -187,3 +188,19 @@ class VRChatOSCManager:
                     self.state.log("warn", f"OSC 下发失败：{result.get('error')}")
         except Exception as exc:
             self.state.log("err", f"OSC 下发异常：{exc}")
+
+    @staticmethod
+    def _normalize_channel(channel: Any) -> str:
+        value = str(channel or "A").upper()
+        if value in {"AB", "A+B", "BOTH"}:
+            return "A+B"
+        if value in {"A", "B"}:
+            return value
+        return "A"
+
+    @classmethod
+    def _expand_channel(cls, channel: Any) -> list[str]:
+        value = cls._normalize_channel(channel)
+        if value == "A+B":
+            return ["A", "B"]
+        return [value]
