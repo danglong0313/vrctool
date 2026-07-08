@@ -35,6 +35,16 @@ dglab = DGLabManager(state)
 vrchat_osc = VRChatOSCManager(state, dglab, chatbox)
 
 
+@app.middleware("http")
+async def disable_ui_cache(request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 def update_config(section: str, **values) -> None:
     config.setdefault(section, {}).update(values)
     save_config(config)
