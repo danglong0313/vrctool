@@ -1,2 +1,2 @@
 $ErrorActionPreference = "Stop"
-python launcher.py
+python -m vrctool_app.launcher

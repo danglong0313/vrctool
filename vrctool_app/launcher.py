@@ -12,8 +12,8 @@ from typing import Optional
 
 import uvicorn
 
-from app import app as asgi_app
 from vrctool_app.lifecycle import set_shutdown_callback
+from vrctool_app.server import app as asgi_app
 
 CTRL_CLOSE_EVENT = 2
 CTRL_LOGOFF_EVENT = 5

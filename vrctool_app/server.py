@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 from uuid import uuid4
 from pathlib import Path
 from typing import Optional
@@ -21,8 +20,9 @@ from vrctool_app.network import get_network_interfaces, pick_default_lan_ip
 from vrctool_app.osc import VRChatOSCManager
 from vrctool_app.state import RuntimeState
 
-BASE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-WEB_DIR = BASE_DIR / "web"
+PACKAGE_DIR = Path(__file__).resolve().parent
+WEB_DIR = PACKAGE_DIR / "web"
+ASSETS_DIR = PACKAGE_DIR / "assets"
 
 app = FastAPI(title="vrctool")
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
@@ -190,7 +190,7 @@ async def index() -> FileResponse:
 
 @app.get("/logo.png")
 async def logo() -> FileResponse:
-    return FileResponse(BASE_DIR / "logo.png", media_type="image/png")
+    return FileResponse(ASSETS_DIR / "logo.png", media_type="image/png")
 
 
 @app.get("/api/status")

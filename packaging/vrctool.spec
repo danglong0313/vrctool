@@ -6,8 +6,10 @@ import os
 from PyInstaller.utils.hooks import collect_submodules
 
 
+spec_base = Path(SPECPATH).resolve()
+project_root = spec_base if (spec_base / "vrctool_app").exists() else spec_base.parent
 exe_name = os.environ.get("VRCTOOL_EXE_NAME", "vrctool")
-icon_path = Path(os.environ.get("VRCTOOL_ICON_PATH", "build/logo.ico"))
+icon_path = Path(os.environ.get("VRCTOOL_ICON_PATH", project_root / "build" / "logo.ico"))
 
 hiddenimports = (
     collect_submodules("uvicorn")
@@ -17,13 +19,13 @@ hiddenimports = (
 )
 
 datas = [
-    ("web", "web"),
-    ("logo.png", "."),
+    (str(project_root / "vrctool_app" / "web"), "vrctool_app/web"),
+    (str(project_root / "vrctool_app" / "assets"), "vrctool_app/assets"),
 ]
 
 a = Analysis(
-    ["launcher.py"],
-    pathex=[],
+    [str(project_root / "vrctool_app" / "launcher.py")],
+    pathex=[str(project_root)],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,

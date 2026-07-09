@@ -132,17 +132,25 @@ config.json
 dist\vrctool_v2.1.exe
 ```
 
-项目根目录的 `logo.png` 会作为网页 Logo，也会在打包时转换为 exe 图标。
+`vrctool_app/assets/logo.png` 会作为网页 Logo，也会在打包时转换为 exe 图标。
 
 默认打包为控制台 exe。关闭 exe 窗口时，后端服务会一起关闭。
 
 ## 项目结构
 
 ```text
-app.py                  FastAPI 后端接口
-launcher.py             启动器，负责窗口生命周期和打开网页
-vrctool_app/            后端功能模块
-web/                    网页前端
+vrctool_app/
+  launcher.py           启动器，负责窗口生命周期和打开网页
+  server.py             FastAPI 后端接口
+  chatbox.py            ChatBox 文本、设备信息、挂机计时发送
+  dglab.py              DG-LAB WebSocket、强度、波形和二维码连接
+  heartrate.py          蓝牙心率读取和 ChatBox 广播
+  osc.py                VRChat OSC 监听和映射
+  assets/               Logo 等资源
+  web/                  网页前端
+packaging/              PyInstaller 打包配置
+references/legacy/      早期参考脚本
+docs/images/            README 界面截图
 requirements.txt        Python 依赖
-vrctool.spec            PyInstaller 打包配置
+run.bat / run.ps1       本地启动入口
 ```

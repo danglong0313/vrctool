@@ -48,8 +48,14 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 }
 
 
+def app_root() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[1]
+
+
 def config_path() -> Path:
-    return Path(sys.argv[0]).resolve().parent / "config.json"
+    return app_root() / "config.json"
 
 
 def load_config() -> Dict[str, Any]:
