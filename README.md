@@ -2,11 +2,22 @@
 
 一个网页形式运行的 VRChat OSC 工具，集成 ChatBox 文本发送、硬件信息发送、挂机计时、DG-LAB 郊狼 3.0 WebSocket 联动和自定义 OSC 映射。
 
+## 界面预览
+
+| 总览 | 心率广播 |
+| --- | --- |
+| ![总览](docs/images/overview.png) | ![心率广播](docs/images/heart-rate.png) |
+
+| 郊狼控制 | OSC 映射 |
+| --- | --- |
+| ![郊狼控制](docs/images/dglab.png) | ![OSC 映射](docs/images/osc-mapping.png) |
+
 ## 功能
 
 - ChatBox 自定义文本循环发送：点击开始后立即发送，并每 3 秒刷新一次。
 - ChatBox 硬件信息发送：CPU、GPU、显存、内存信息。
 - ChatBox 挂机计时发送。
+- 心率广播：扫描支持标准蓝牙 Heart Rate Service 的手表/心率带，实时读取 BPM 并发送到 VRChat ChatBox。
 - DG-LAB 郊狼 3.0 WebSocket 连接：网页按钮弹出二维码，设备连接后自动切换为取消连接。
 - DG-LAB A/B 通道强度、波形、上限、面板模式、交互模式控制。
 - DG-LAB 状态发送到 VRChat ChatBox，更新时间为 1 秒。
@@ -22,6 +33,7 @@
 - Python 3.10 或更高版本
 - VRChat 已开启 OSC
 - 如需郊狼联动，需要 DG-LAB App 和郊狼 3.0 设备
+- 如需心率广播，需要手表或心率带开启蓝牙心率广播模式
 
 ## 安装依赖
 
@@ -80,6 +92,15 @@ ChatBox 默认发送到：
 
 强度上限会按照设备 WebSocket 返回的最大值限制，网页设置不会超过设备返回上限。
 
+## 心率广播
+
+1. 在手表或心率带上开启心率广播模式。
+2. 打开网页 `心率广播` 分区。
+3. 点击 `扫描设备`，选择你的心率设备。
+4. 点击 `连接设备`，看到 BPM 后点击 `发送到 ChatBox`。
+
+默认每 1 秒发送一次心率到 VRChat ChatBox，可在网页中调整发送间隔。该功能使用标准蓝牙 Heart Rate Service；如果设备没有开放标准心率服务，可能无法读取。
+
 ## OSC 映射
 
 默认提供两条常用参数：
@@ -99,29 +120,19 @@ ChatBox 默认发送到：
 config.json
 ```
 
-这个文件保存端口、OSC 映射、DG-LAB 设置、ChatBox 文本等本地配置。它是本机配置文件，不会提交到 Git 仓库。
+这个文件保存端口、OSC 映射、DG-LAB 设置、ChatBox 文本、心率设备地址等本地配置。它是本机配置文件，不会提交到 Git 仓库。
 
 ## 打包 EXE
 
-运行：
+项目不再保留固定的 `build_exe.bat` 或 `build_exe.ps1` 打包脚本。
 
-```powershell
-.\build_exe.ps1
-```
-
-或双击：
+需要打包时按版本号生成一次性 PyInstaller 命令，输出文件名形如：
 
 ```text
-build_exe.bat
+dist\vrctool_v2.1.exe
 ```
 
-打包结果：
-
-```text
-dist\vrctool.exe
-```
-
-如果项目根目录存在 `logo.png`，打包脚本会自动生成 `build\logo.ico` 并作为 exe 图标。
+项目根目录的 `logo.png` 会作为网页 Logo，也会在打包时转换为 exe 图标。
 
 默认打包为控制台 exe。关闭 exe 窗口时，后端服务会一起关闭。
 
@@ -134,5 +145,4 @@ vrctool_app/            后端功能模块
 web/                    网页前端
 requirements.txt        Python 依赖
 vrctool.spec            PyInstaller 打包配置
-build_exe.ps1           打包脚本
 ```

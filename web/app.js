@@ -7,6 +7,7 @@ const debounceTimers = new Map();
 const sectionTitles = {
   overview: "总览",
   chatbox: "ChatBox",
+  heart: "心率广播",
   dglab: "郊狼控制",
   osc: "OSC 映射",
   logs: "日志",
@@ -198,10 +199,37 @@ function renderCustomOscList(items) {
   });
 }
 
+function renderHeartRateDevices(heartRate) {
+  const select = $("heartDeviceSelect");
+  const devices = heartRate.devices || [];
+  const selectedAddress = heartRate.address || "";
+  if (!devices.length) {
+    const savedLabel = selectedAddress
+      ? `${heartRate.device_name || "已保存设备"} (${selectedAddress})`
+      : "请先扫描心率设备";
+    select.innerHTML = `<option value="${escapeHtml(selectedAddress)}" data-name="${escapeHtml(heartRate.device_name || "")}">${escapeHtml(savedLabel)}</option>`;
+    select.disabled = !selectedAddress;
+    return;
+  }
+  select.disabled = false;
+  select.innerHTML = devices
+    .map((device) => {
+      const support = device.heart_rate_supported ? "心率" : "未知";
+      const rssi = device.rssi === null || device.rssi === undefined ? "" : ` ${device.rssi}dBm`;
+      const label = `${device.name || "未知设备"} | ${support}${rssi}`;
+      return `<option value="${escapeHtml(device.address)}" data-name="${escapeHtml(device.name || "")}">${escapeHtml(label)}</option>`;
+    })
+    .join("");
+  if (devices.some((device) => device.address === selectedAddress)) {
+    select.value = selectedAddress;
+  }
+}
+
 function render(state) {
   if (!state) return;
   currentState = state;
   const { chatbox, device, afk, dglab, osc, logs } = state;
+  const heartRate = state.heart_rate || {};
 
   setPill($("oscState"), osc.running, "OSC 运行", "OSC 停止");
   setPill($("dglabState"), dglab.running, "DG-LAB 组件运行", "DG-LAB 组件停止");
@@ -278,6 +306,32 @@ function render(state) {
     ? `${osc.last_channel || "-"} ${osc.last_value} -> ${osc.last_strength}`
     : "-";
   renderCustomOscList(osc.custom_mappings);
+  renderHeartRateDevices(heartRate);
+
+  $("heartStatus").textContent = heartRate.status || "未连接";
+  $("heartStatus").classList.toggle("is-good", Boolean(heartRate.connected));
+  $("heartStatus").classList.toggle("is-warn", !heartRate.connected);
+  $("heartBpm").textContent = heartRate.bpm ? heartRate.bpm : "--";
+  $("heartDeviceName").textContent = heartRate.device_name || heartRate.address || "未选择设备";
+  $("heartLastSeen").value = heartRate.last_seen || "-";
+  setValueUnlessFocused("heartInterval", heartRate.interval || 1);
+  $("heartError").textContent = heartRate.error ? heartRate.error.slice(0, 42) : "";
+  $("scanHeartRate").disabled = Boolean(heartRate.scanning);
+  $("scanHeartRate").innerHTML = heartRate.scanning
+    ? '<i data-lucide="loader-circle"></i>扫描中'
+    : '<i data-lucide="radar"></i>扫描设备';
+  $("connectHeartRate").disabled = Boolean(
+    heartRate.connecting || heartRate.connected || !$("heartDeviceSelect").value,
+  );
+  $("connectHeartRate").innerHTML = heartRate.connected
+    ? '<i data-lucide="bluetooth-connected"></i>已连接'
+    : heartRate.connecting
+      ? '<i data-lucide="loader-circle"></i>连接中'
+      : '<i data-lucide="bluetooth-connected"></i>连接设备';
+  $("toggleHeartChatbox").innerHTML = heartRate.send_enabled
+    ? '<i data-lucide="square"></i>停止发送'
+    : '<i data-lucide="message-square-heart"></i>发送到 ChatBox';
+  $("disconnectHeartRate").disabled = !heartRate.connected;
 
   $("lastMessage").textContent = chatbox.last_message ? chatbox.last_message.slice(0, 18) : "-";
   $("logList").innerHTML = (logs || [])
@@ -326,6 +380,16 @@ function bindEvents() {
       if (!interval) return null;
       return {
         enabled: Boolean(currentState?.chatbox?.afk_enabled),
+        interval,
+      };
+    });
+
+  const syncHeartRateInterval = () =>
+    postDebounced("heart-rate-interval", "/api/heartrate/chatbox", () => {
+      const interval = numericInputValue("heartInterval");
+      if (!interval) return null;
+      return {
+        enabled: Boolean(currentState?.heart_rate?.send_enabled),
         interval,
       };
     });
@@ -393,6 +457,7 @@ function bindEvents() {
   $("chatPort").addEventListener("input", syncChatboxConfig);
   $("deviceInterval").addEventListener("input", syncDeviceInterval);
   $("afkInterval").addEventListener("input", syncAfkInterval);
+  $("heartInterval").addEventListener("input", syncHeartRateInterval);
   const syncCustomMessage = (sourceId, mirrorId) => {
     const value = $(sourceId).value;
     if (document.activeElement !== $(mirrorId)) {
@@ -451,6 +516,25 @@ function bindEvents() {
 
   $("resetAfk").addEventListener("click", () => api("/api/chatbox/afk/reset", {}));
   $("refreshDevice").addEventListener("click", () => api("/api/device/refresh", {}));
+
+  $("scanHeartRate").addEventListener("click", () => api("/api/heartrate/scan", { timeout: 5 }));
+  $("connectHeartRate").addEventListener("click", () => {
+    const option = $("heartDeviceSelect").selectedOptions[0];
+    const address = $("heartDeviceSelect").value;
+    if (!address) return;
+    api("/api/heartrate/connect", {
+      address,
+      name: option?.dataset?.name || option?.textContent || "",
+    });
+  });
+  $("disconnectHeartRate").addEventListener("click", () => api("/api/heartrate/disconnect", {}));
+  $("toggleHeartChatbox").addEventListener("click", () => {
+    const interval = numericInputValue("heartInterval") || 1;
+    api("/api/heartrate/chatbox", {
+      enabled: !currentState?.heart_rate?.send_enabled,
+      interval,
+    });
+  });
 
   $("toggleDglab").addEventListener("click", () => {
     if (currentState?.dglab?.bound) {

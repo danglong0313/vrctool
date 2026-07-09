@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>vrctool</title>
     <meta http-equiv="Cache-Control" content="no-store" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260708-logo-8" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260709-heart-rate-1" />
     <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-    <script defer src="/static/app.js?v=20260708-osc-channel-3"></script>
+    <script defer src="/static/app.js?v=20260709-heart-rate-1"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -26,6 +26,10 @@
           <button class="nav-item" type="button" data-section="chatbox">
             <i data-lucide="message-square-text"></i>
             ChatBox
+          </button>
+          <button class="nav-item" type="button" data-section="heart">
+            <i data-lucide="heart-pulse"></i>
+            心率广播
           </button>
           <button class="nav-item" type="button" data-section="dglab">
             <i data-lucide="activity"></i>
@@ -183,6 +187,61 @@
               </button>
             </div>
           </section>
+        </section>
+
+        <section class="section-page" data-page="heart">
+          <div class="panel-grid two">
+            <section class="task-card heart-card">
+              <div class="panel-head">
+                <h3>心率广播</h3>
+                <span class="chip" id="heartStatus">未连接</span>
+              </div>
+              <div class="heart-readout">
+                <span>当前心率</span>
+                <strong><span id="heartBpm">--</span><small>BPM</small></strong>
+                <p id="heartDeviceName">未选择设备</p>
+              </div>
+              <div class="inline-grid">
+                <label>
+                  <span>发送间隔</span>
+                  <input id="heartInterval" type="number" min="1" step="1" value="1" />
+                </label>
+                <label>
+                  <span>最近更新</span>
+                  <input id="heartLastSeen" value="-" disabled />
+                </label>
+              </div>
+              <button class="primary" id="toggleHeartChatbox">
+                <i data-lucide="message-square-heart"></i>
+                发送到 ChatBox
+              </button>
+            </section>
+
+            <section class="task-card">
+              <div class="panel-head">
+                <h3>手表连接</h3>
+                <span class="mini" id="heartError"></span>
+              </div>
+              <label>
+                <span>心率设备</span>
+                <select id="heartDeviceSelect"></select>
+              </label>
+              <div class="action-grid">
+                <button id="scanHeartRate">
+                  <i data-lucide="radar"></i>
+                  扫描设备
+                </button>
+                <button id="connectHeartRate">
+                  <i data-lucide="bluetooth-connected"></i>
+                  连接设备
+                </button>
+                <button class="ghost" id="disconnectHeartRate">
+                  <i data-lucide="bluetooth-off"></i>
+                  断开
+                </button>
+              </div>
+            </section>
+          </div>
         </section>
 
         <section class="section-page" data-page="dglab">

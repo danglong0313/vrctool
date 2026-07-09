@@ -435,6 +435,42 @@ h3 {
   overflow-wrap: anywhere;
 }
 
+.heart-card::before {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--danger) 14%, transparent), transparent 46%);
+}
+
+.heart-readout {
+  display: grid;
+  gap: 8px;
+  min-height: 170px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 88% 18%, color-mix(in srgb, var(--danger) 24%, transparent), transparent 32%),
+    var(--surface);
+  padding: 18px;
+}
+
+.heart-readout span,
+.heart-readout p {
+  color: var(--muted);
+}
+
+.heart-readout strong {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: color-mix(in srgb, var(--danger) 74%, var(--accent) 26%);
+  font-size: clamp(54px, 8vw, 88px);
+  font-variant-numeric: tabular-nums;
+  line-height: 0.95;
+}
+
+.heart-readout small {
+  color: var(--muted);
+  font-size: 18px;
+}
+
 .gradient-b::before {
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent-2) 16%, transparent), transparent 48%);
 }
@@ -468,6 +504,18 @@ h3 {
   border-radius: 999px;
   background: var(--surface);
   padding: 0 10px;
+}
+
+.chip.is-good {
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 48%, transparent);
+  background: color-mix(in srgb, var(--good) 12%, transparent);
+}
+
+.chip.is-warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 48%, transparent);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
 }
 
 .action-grid,

@@ -29,6 +29,11 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "waveform_a": "呼吸",
         "waveform_b": "呼吸",
     },
+    "heart_rate": {
+        "address": "",
+        "device_name": "",
+        "interval": 1.0,
+    },
     "osc": {
         "listen_host": "127.0.0.1",
         "listen_port": 9001,

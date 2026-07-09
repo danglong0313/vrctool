@@ -1,16 +1,19 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
+import os
 
 from PyInstaller.utils.hooks import collect_submodules
 
 
-icon_path = Path("build/logo.ico")
+exe_name = os.environ.get("VRCTOOL_EXE_NAME", "vrctool")
+icon_path = Path(os.environ.get("VRCTOOL_ICON_PATH", "build/logo.ico"))
 
 hiddenimports = (
     collect_submodules("uvicorn")
     + collect_submodules("pydglab_ws")
     + collect_submodules("pythonosc")
+    + collect_submodules("bleak")
 )
 
 datas = [
@@ -39,7 +42,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="vrctool",
+    name=exe_name,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

@@ -15,6 +15,7 @@ from vrctool_app.chatbox import ChatboxManager
 from vrctool_app.config_store import load_config, save_config
 from vrctool_app.device_info import get_device_info
 from vrctool_app.dglab import DGLabManager
+from vrctool_app.heartrate import HeartRateManager
 from vrctool_app.lifecycle import request_shutdown
 from vrctool_app.network import get_network_interfaces, pick_default_lan_ip
 from vrctool_app.osc import VRChatOSCManager
@@ -28,9 +29,10 @@ app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
 state = RuntimeState()
 config = load_config()
-for config_section in ("chatbox", "dglab", "osc"):
+for config_section in ("chatbox", "dglab", "heart_rate", "osc"):
     state.patch(config_section, **config.get(config_section, {}))
 chatbox = ChatboxManager(state)
+heart_rate = HeartRateManager(state, chatbox.send_message)
 dglab = DGLabManager(state)
 vrchat_osc = VRChatOSCManager(state, dglab, chatbox)
 
@@ -110,6 +112,20 @@ class FireStepPayload(BaseModel):
     fire_step: int
 
 
+class HeartRateScanPayload(BaseModel):
+    timeout: float = 5.0
+
+
+class HeartRateConnectPayload(BaseModel):
+    address: str
+    name: str = ""
+
+
+class HeartRateChatboxPayload(BaseModel):
+    enabled: bool
+    interval: float = 1.0
+
+
 class OSCStartPayload(BaseModel):
     host: str = "127.0.0.1"
     port: int = 9001
@@ -162,6 +178,7 @@ async def startup() -> None:
 @app.on_event("shutdown")
 async def shutdown() -> None:
     vrchat_osc.stop()
+    await heart_rate.shutdown()
     await chatbox.shutdown()
     await dglab.stop()
 
@@ -359,6 +376,43 @@ async def set_fire_step(payload: FireStepPayload):
 @app.post("/api/dglab/emergency-stop")
 async def emergency_stop():
     await dglab.emergency_stop()
+    return state.snapshot()
+
+
+@app.post("/api/heartrate/scan")
+async def scan_heart_rate(payload: HeartRateScanPayload):
+    await heart_rate.scan(payload.timeout)
+    return state.snapshot()
+
+
+@app.post("/api/heartrate/connect")
+async def connect_heart_rate(payload: HeartRateConnectPayload):
+    await heart_rate.connect(payload.address, payload.name)
+    snapshot = state.snapshot()["heart_rate"]
+    update_config(
+        "heart_rate",
+        address=snapshot["address"],
+        device_name=snapshot["device_name"],
+        interval=snapshot["interval"],
+    )
+    return state.snapshot()
+
+
+@app.post("/api/heartrate/disconnect")
+async def disconnect_heart_rate():
+    await heart_rate.disconnect()
+    return state.snapshot()
+
+
+@app.post("/api/heartrate/chatbox")
+async def toggle_heart_rate_chatbox(payload: HeartRateChatboxPayload):
+    interval = max(1.0, float(payload.interval))
+    if payload.enabled:
+        await heart_rate.start_chatbox(interval)
+    else:
+        await heart_rate.stop_chatbox()
+        state.patch("heart_rate", interval=interval)
+    update_config("heart_rate", interval=state.snapshot()["heart_rate"]["interval"])
     return state.snapshot()
 
 
