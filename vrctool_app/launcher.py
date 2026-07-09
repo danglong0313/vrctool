@@ -13,7 +13,7 @@ from typing import Optional
 import uvicorn
 
 from vrctool_app.lifecycle import set_shutdown_callback
-from vrctool_app.server import app as asgi_app
+from vrctool_app.single_instance import SingleInstanceGuard, read_running_instance
 
 CTRL_CLOSE_EVENT = 2
 CTRL_LOGOFF_EVENT = 5
@@ -78,6 +78,21 @@ def main() -> int:
     global server
     args = parse_args()
     url = f"http://{args.host}:{args.port}"
+    instance_guard = SingleInstanceGuard()
+
+    if not instance_guard.acquire():
+        running = read_running_instance() or {}
+        running_url = running.get("url") or url
+        print("vrctool 已经在运行，为了避免组件冲突，本次启动已取消。")
+        print(f"已运行网页地址：{running_url}")
+        if not args.no_browser:
+            webbrowser.open(str(running_url))
+        time.sleep(3)
+        return 0
+
+    instance_guard.write_instance(args.host, args.port)
+
+    from vrctool_app.server import app as asgi_app
 
     config = uvicorn.Config(
         asgi_app,
@@ -102,6 +117,7 @@ def main() -> int:
     finally:
         set_shutdown_callback(None)
         server = None
+        instance_guard.close()
         print("后端服务已关闭。")
     return 0
 

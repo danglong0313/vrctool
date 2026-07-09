@@ -24,6 +24,7 @@
 - OSC 映射：支持默认 A/B 参数，也支持自定义 OSC 参数。
 - 自定义 OSC 参数可选择 A、B、A+B 通道，并可用勾选框控制是否生效。
 - 配置自动保存到 `config.json`，重启后继续生效。
+- 启动器带单实例保护，重复打开时不会再启动第二套后端组件。
 - 控制台式网页界面：左侧分区导航和基础设置，右侧任务工作区，支持浅色/深色主题切换。
 - 郊狼强度环形可视化，会随 A/B 通道强度实时变化。
 
@@ -142,6 +143,7 @@ dist\vrctool_v2.1.exe
 vrctool_app/
   launcher.py           启动器，负责窗口生命周期和打开网页
   server.py             FastAPI 后端接口
+  single_instance.py    防止多开导致组件冲突
   chatbox.py            ChatBox 文本、设备信息、挂机计时发送
   dglab.py              DG-LAB WebSocket、强度、波形和二维码连接
   heartrate.py          蓝牙心率读取和 ChatBox 广播
