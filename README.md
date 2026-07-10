@@ -156,3 +156,7 @@ docs/images/            README 界面截图
 requirements.txt        Python 依赖
 run.bat / run.ps1       本地启动入口
 ```
+
+## 开源项目致谢
+
+感谢开源项目 [ccvrc/DG-LAB-VRCOSC](https://github.com/ccvrc/DG-LAB-VRCOSC) 为本项目的开发提供参考。
