@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>vrctool</title>
     <meta http-equiv="Cache-Control" content="no-store" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260709-heart-rate-1" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260711-update-1" />
     <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-    <script defer src="/static/app.js?v=20260709-heart-rate-1"></script>
+    <script defer src="/static/app.js?v=20260711-update-1"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -56,6 +56,39 @@
             <span class="status-pill" id="oscState">OSC</span>
             <span class="status-pill" id="dglabState">DG-LAB 组件</span>
             <span class="status-pill" id="bindState">未连接</span>
+          </div>
+        </section>
+
+        <section class="side-card update-card" id="updateCard" aria-labelledby="updateCardTitle">
+          <div class="side-card-head">
+            <span id="updateCardTitle">应用更新</span>
+            <span class="version-badge" id="currentVersion">v2.2.0</span>
+          </div>
+          <div class="update-summary">
+            <strong id="updateTitle">等待检查</strong>
+            <small id="updateStatus">当前版本已就绪</small>
+          </div>
+          <div
+            class="update-progress"
+            id="updateProgress"
+            role="progressbar"
+            aria-label="更新下载进度"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+            hidden
+          >
+            <span id="updateProgressBar"></span>
+          </div>
+          <div class="update-actions">
+            <button class="ghost" id="checkUpdate" type="button">
+              <i data-lucide="refresh-cw"></i>
+              检查更新
+            </button>
+            <button class="primary" id="updateAction" type="button" hidden>
+              <i data-lucide="download"></i>
+              下载更新
+            </button>
           </div>
         </section>
 

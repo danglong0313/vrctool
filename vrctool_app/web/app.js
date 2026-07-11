@@ -22,7 +22,16 @@ async function api(path, payload = null) {
       }
     : { method: "GET" };
   const response = await fetch(path, options);
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  if (!response.ok) {
+    let message = `${response.status} ${response.statusText}`;
+    try {
+      const error = await response.json();
+      message = error.detail || message;
+    } catch (_error) {
+      // The HTTP status remains useful when the response has no JSON body.
+    }
+    throw new Error(message);
+  }
   const data = await response.json();
   render(data);
   return data;
@@ -225,11 +234,74 @@ function renderHeartRateDevices(heartRate) {
   }
 }
 
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (bytes < 1024 * 1024) return `${Math.max(0, bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function renderUpdateState(update) {
+  const status = update.status || "idle";
+  const progress = Math.max(0, Math.min(100, Number(update.progress || 0)));
+  const card = $("updateCard");
+  const checkButton = $("checkUpdate");
+  const actionButton = $("updateAction");
+  const progressTrack = $("updateProgress");
+
+  $("currentVersion").textContent = `v${update.current_version || "-"}`;
+  card.classList.toggle("is-error", status === "error");
+  card.classList.toggle("is-ready", status === "ready");
+  progressTrack.hidden = !["downloading", "ready"].includes(status);
+  progressTrack.setAttribute("aria-valuenow", String(progress));
+  $("updateProgressBar").style.width = `${progress}%`;
+
+  const display = {
+    idle: ["等待检查", "当前版本已就绪"],
+    checking: ["正在检查", "连接 GitHub Releases"],
+    up_to_date: ["已是最新版本", `v${update.current_version || "-"}`],
+    available: [
+      `发现 v${update.latest_version || "-"}`,
+      update.release_name || formatBytes(update.asset_size),
+    ],
+    downloading: [
+      `正在下载 ${progress}%`,
+      `${formatBytes(update.downloaded_bytes)} / ${formatBytes(update.asset_size)}`,
+    ],
+    ready: [`v${update.latest_version || ""} 已就绪`, "安装包校验通过"],
+    installing: ["正在安装更新", "应用即将重新启动"],
+    error: ["更新失败", update.error || "请稍后重试"],
+  };
+  const [title, detail] = display[status] || display.idle;
+  $("updateTitle").textContent = title;
+  $("updateStatus").textContent = detail;
+
+  const busy = ["checking", "downloading", "installing"].includes(status);
+  checkButton.disabled = busy;
+  checkButton.innerHTML = status === "checking"
+    ? '<i data-lucide="loader-circle"></i>检查中'
+    : '<i data-lucide="refresh-cw"></i>检查更新';
+
+  actionButton.hidden = !["available", "downloading", "ready", "installing"].includes(status);
+  actionButton.disabled = ["downloading", "installing"].includes(status);
+  if (status === "available") {
+    actionButton.innerHTML = update.can_install
+      ? '<i data-lucide="download"></i>下载更新'
+      : '<i data-lucide="external-link"></i>查看发布页';
+  } else if (status === "downloading") {
+    actionButton.innerHTML = `<i data-lucide="loader-circle"></i>下载 ${progress}%`;
+  } else if (status === "ready") {
+    actionButton.innerHTML = '<i data-lucide="refresh-cw"></i>安装并重启';
+  } else if (status === "installing") {
+    actionButton.innerHTML = '<i data-lucide="loader-circle"></i>正在重启';
+  }
+}
+
 function render(state) {
   if (!state) return;
   currentState = state;
   const { chatbox, device, afk, dglab, osc, logs } = state;
   const heartRate = state.heart_rate || {};
+  const update = state.update || {};
 
   setPill($("oscState"), osc.running, "OSC 运行", "OSC 停止");
   setPill($("dglabState"), dglab.running, "DG-LAB 组件运行", "DG-LAB 组件停止");
@@ -307,6 +379,7 @@ function render(state) {
     : "-";
   renderCustomOscList(osc.custom_mappings);
   renderHeartRateDevices(heartRate);
+  renderUpdateState(update);
 
   $("heartStatus").textContent = heartRate.status || "未连接";
   $("heartStatus").classList.toggle("is-good", Boolean(heartRate.connected));
@@ -481,6 +554,27 @@ function bindEvents() {
     $("shutdownApp").innerHTML = '<i data-lucide="loader-circle"></i>';
     if (window.lucide) window.lucide.createIcons();
     await fetch("/api/app/shutdown", { method: "POST" }).catch(() => {});
+  });
+
+  const showUpdateError = (error) => {
+    $("updateCard").classList.add("is-error");
+    $("updateTitle").textContent = "更新失败";
+    $("updateStatus").textContent = error.message || String(error);
+  };
+  $("checkUpdate").addEventListener("click", () => {
+    api("/api/update/check").catch(showUpdateError);
+  });
+  $("updateAction").addEventListener("click", () => {
+    const update = currentState?.update || {};
+    if (update.status === "available" && !update.can_install) {
+      if (update.release_url) window.open(update.release_url, "_blank", "noopener");
+      return;
+    }
+    if (update.status === "available") {
+      api("/api/update/download", {}).catch(showUpdateError);
+    } else if (update.status === "ready") {
+      api("/api/update/install", {}).catch(showUpdateError);
+    }
   });
 
   const toggleCustomMessage = () => {

@@ -6,6 +6,8 @@ from datetime import datetime
 from threading import RLock
 from typing import Any, Deque, Dict
 
+from vrctool_app import __version__
+
 
 class RuntimeState:
     def __init__(self) -> None:
@@ -15,7 +17,26 @@ class RuntimeState:
         self.data: Dict[str, Any] = {
             "app": {
                 "name": "vrctool",
+                "version": __version__,
                 "started_at": now,
+            },
+            "update": {
+                "current_version": __version__,
+                "latest_version": "",
+                "status": "idle",
+                "available": False,
+                "can_install": False,
+                "release_name": "",
+                "release_notes": "",
+                "release_url": "",
+                "asset_name": "",
+                "asset_size": 0,
+                "download_url": "",
+                "downloaded_bytes": 0,
+                "progress": 0,
+                "installer_path": "",
+                "digest": "",
+                "error": "",
             },
             "chatbox": {
                 "host": "127.0.0.1",

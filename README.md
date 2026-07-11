@@ -28,15 +28,71 @@
 - 控制台式网页界面：左侧分区导航和基础设置，右侧任务工作区，支持浅色/深色主题切换。
 - 郊狼强度环形可视化，会随 A/B 通道强度实时变化。
 
+## v2.2.0 更新内容
+
+- 新增 Windows 安装包，支持开始菜单快捷方式、可选桌面快捷方式和标准卸载入口。
+- 安装时自动将程序目录加入当前用户的 `PATH`，新打开终端后可以直接使用 `vrctool` 命令。
+- 新增 `start`、`version`、`-v`、`uninstall` 和 `-p` 命令行参数。
+- 新增应用内更新：可以在网页中检查、下载并安装 GitHub Releases 中的新版本。
+- 安装版配置迁移到 `%LOCALAPPDATA%\vrctool`，覆盖安装或应用更新时会保留用户配置。
+- 卸载程序使用 Inno Setup 默认文件名 `unins000.exe`，同时支持通过 `vrctool uninstall` 启动卸载。
+
 ## 环境
 
 - Windows 10/11
-- Python 3.10 或更高版本
+- 安装版不需要 Python；从源码运行需要 Python 3.10 或更高版本
 - VRChat 已开启 OSC
 - 如需郊狼联动，需要 DG-LAB App 和郊狼 3.0 设备
 - 如需心率广播，需要手表或心率带开启蓝牙心率广播模式
 
-## 安装依赖
+## 安装
+
+### 使用安装包（推荐）
+
+[GitHub Releases](https://github.com/danglong0313/vrctool/releases) 中会提供以下两种 Windows 文件：
+
+| 文件名 | 用途 |
+| --- | --- |
+| `vrctool-setup-2.2.0.exe` | 推荐普通用户使用的安装包，会创建安装记录、快捷方式并配置命令行。 |
+| `vrctool_v2.2.0.exe` | 独立主程序，不执行安装，也不会自动添加快捷方式或命令行路径。 |
+
+安装步骤：
+
+1. 从 [GitHub Releases](https://github.com/danglong0313/vrctool/releases) 下载 `vrctool-setup-2.2.0.exe`。
+2. 双击安装包并按照提示完成安装，不需要管理员权限。
+3. 从开始菜单或桌面快捷方式启动 vrctool。
+4. 如需使用命令行，请在安装完成后重新打开 PowerShell 或命令提示符。
+
+当前安装包尚未进行代码签名，Windows SmartScreen 可能显示“未知发布者”。请确认安装包来自本项目的 GitHub Releases。
+
+### 默认安装路径
+
+默认程序目录为：
+
+```text
+%LOCALAPPDATA%\Programs\vrctool
+```
+
+展开后的路径通常是：
+
+```text
+C:\Users\<用户名>\AppData\Local\Programs\vrctool
+```
+
+安装完成后主要文件位置如下：
+
+| 内容 | 默认路径 |
+| --- | --- |
+| 程序目录 | `%LOCALAPPDATA%\Programs\vrctool` |
+| 主程序 | `%LOCALAPPDATA%\Programs\vrctool\vrctool.exe` |
+| 默认卸载程序 | `%LOCALAPPDATA%\Programs\vrctool\unins000.exe` |
+| 用户配置 | `%LOCALAPPDATA%\vrctool\config.json` |
+
+程序文件和用户配置分开保存，因此覆盖安装和应用内更新会保留配置，卸载应用时默认也会保留用户配置。
+
+### 从源码运行
+
+安装包用户不需要安装 Python。从源码运行或自行打包时，先安装依赖：
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -44,7 +100,13 @@ python -m pip install -r requirements.txt
 
 ## 启动
 
-双击 `run.bat`，或在 PowerShell 中运行：
+安装版可以从开始菜单、桌面快捷方式或命令行启动：
+
+```powershell
+vrctool start
+```
+
+从源码运行时，双击 `run.bat`，或在 PowerShell 中运行：
 
 ```powershell
 .\run.ps1
@@ -56,13 +118,47 @@ python -m pip install -r requirements.txt
 http://127.0.0.1:8765
 ```
 
+### Windows 命令行
+
+安装完成后重新打开 PowerShell 或命令提示符，即可直接使用 `vrctool` 命令：
+
+```powershell
+vrctool start
+vrctool version
+vrctool -v
+vrctool -p 8877
+vrctool start -p 8877
+vrctool uninstall
+```
+
+- `start`：启动应用，省略命令时也会启动。
+- `version` / `-v`：显示当前版本号。
+- `-p` / `--port`：指定网页服务端口，范围为 `1-65535`。
+- `uninstall`：关闭正在运行的 vrctool，并启动卸载程序。
+
+安装目录中也提供可直接双击的卸载入口：
+
+```text
+%LOCALAPPDATA%\Programs\vrctool\unins000.exe
+```
+
+这是 Inno Setup 默认生成的卸载程序文件名；平时推荐直接使用 `vrctool uninstall` 或 Windows“设置”中的卸载入口。
+
 ## 关闭
 
 推荐直接关闭启动窗口，或在启动窗口按 `Ctrl+C`。
 
 后端服务运行在启动器同一个进程里，窗口关闭时后端会一起退出，不会留下隐藏的 uvicorn 进程。
 
-网页右上角也有关闭按钮，用它会请求启动器关闭后端服务。
+网页左侧也有关闭按钮，用它会请求启动器关闭后端服务。
+
+## 应用更新
+
+安装版会在启动后检查 GitHub Releases，也可以在网页左侧的 `应用更新` 区域手动检查。
+
+发现新版本后，可以直接下载安装包。下载完成并通过 SHA-256 校验后，点击 `安装并重启`，当前服务会正常退出，安装器覆盖旧版本并重新启动应用。
+
+源码运行模式可以查看新版本，但不会自动安装。
 
 ## VRChat 设置
 
@@ -115,22 +211,29 @@ ChatBox 默认发送到：
 
 ## 配置文件
 
-运行后会在程序目录生成：
+源码运行后会在项目目录生成：
 
 ```text
 config.json
 ```
 
-这个文件保存端口、OSC 映射、DG-LAB 设置、ChatBox 文本、心率设备地址等本地配置。它是本机配置文件，不会提交到 Git 仓库。
+安装版的配置保存在：
+
+```text
+%LOCALAPPDATA%\vrctool\config.json
+```
+
+这个文件保存端口、OSC 映射、DG-LAB 设置、ChatBox 文本、心率设备地址等本地配置。配置与程序文件分开保存，覆盖升级时会继续保留。它是本机配置文件，不会提交到 Git 仓库。
 
 ## 打包 EXE
 
-项目不再保留固定的 `build_exe.bat` 或 `build_exe.ps1` 打包脚本。
+项目不保留固定的 `build_exe.bat` 或 `build_exe.ps1` 打包脚本。
 
-需要打包时按版本号生成一次性 PyInstaller 命令，输出文件名形如：
+需要打包时按照 [packaging/README.md](packaging/README.md) 执行一次性 PyInstaller 和 Inno Setup 命令，输出文件名形如：
 
 ```text
-dist\vrctool_v2.1.exe
+dist\vrctool_v2.2.0.exe
+dist\vrctool-setup-2.2.0.exe
 ```
 
 `vrctool_app/assets/logo.png` 会作为网页 Logo，也会在打包时转换为 exe 图标。
@@ -144,13 +247,17 @@ vrctool_app/
   launcher.py           启动器，负责窗口生命周期和打开网页
   server.py             FastAPI 后端接口
   single_instance.py    防止多开导致组件冲突
+  installation.py       查找并启动 Windows 卸载程序
+  config_store.py       用户配置路径和旧配置迁移
   chatbox.py            ChatBox 文本、设备信息、挂机计时发送
   dglab.py              DG-LAB WebSocket、强度、波形和二维码连接
   heartrate.py          蓝牙心率读取和 ChatBox 广播
   osc.py                VRChat OSC 监听和映射
+  update_manager.py     GitHub Release 检查、下载和更新安装
   assets/               Logo 等资源
   web/                  网页前端
-packaging/              PyInstaller 打包配置
+packaging/              PyInstaller 和 Inno Setup 打包配置
+tests/                  命令行、安装、配置迁移和应用更新自动测试
 references/legacy/      早期参考脚本
 docs/images/            README 界面截图
 requirements.txt        Python 依赖

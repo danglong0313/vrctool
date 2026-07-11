@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from uuid import uuid4
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -19,6 +20,7 @@ from vrctool_app.lifecycle import request_shutdown
 from vrctool_app.network import get_network_interfaces, pick_default_lan_ip
 from vrctool_app.osc import VRChatOSCManager
 from vrctool_app.state import RuntimeState
+from vrctool_app.update_manager import UpdateError, UpdateManager
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 WEB_DIR = PACKAGE_DIR / "web"
@@ -31,6 +33,7 @@ state = RuntimeState()
 config = load_config()
 for config_section in ("chatbox", "dglab", "heart_rate", "osc"):
     state.patch(config_section, **config.get(config_section, {}))
+updates = UpdateManager(state)
 chatbox = ChatboxManager(state)
 heart_rate = HeartRateManager(state, chatbox.send_message)
 dglab = DGLabManager(state)
@@ -174,6 +177,9 @@ async def startup() -> None:
     except Exception as exc:
         state.log("warn", f"DG-LAB 自动启动失败：{exc}")
 
+    if updates.can_install:
+        asyncio.create_task(asyncio.to_thread(updates.check_for_updates))
+
 
 @app.on_event("shutdown")
 async def shutdown() -> None:
@@ -215,6 +221,31 @@ async def shutdown_app():
     ok = request_shutdown()
     state.log("warn", "正在关闭后端服务" if ok else "当前启动方式不支持网页关闭")
     return {"ok": ok}
+
+
+@app.get("/api/update/check")
+async def check_update():
+    return await asyncio.to_thread(updates.check_for_updates)
+
+
+@app.post("/api/update/download")
+async def download_update():
+    try:
+        return updates.start_download()
+    except UpdateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/update/install")
+async def install_update():
+    try:
+        snapshot = updates.install_update()
+    except UpdateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    timer = threading.Timer(1.0, lambda: request_shutdown())
+    timer.daemon = True
+    timer.start()
+    return snapshot
 
 
 @app.websocket("/ws/status")

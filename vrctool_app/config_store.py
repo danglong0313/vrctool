@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -54,17 +55,38 @@ def app_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def app_data_root() -> Path:
+    if os.name == "nt":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    path = base / "vrctool"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def runtime_data_root() -> Path:
+    return app_data_root() if getattr(sys, "frozen", False) else app_root()
+
+
 def config_path() -> Path:
-    return app_root() / "config.json"
+    return runtime_data_root() / "config.json"
 
 
 def load_config() -> Dict[str, Any]:
     path = config_path()
+    source_path = path
+    migrated = False
+    if getattr(sys, "frozen", False) and not path.exists():
+        legacy_path = app_root() / "config.json"
+        if legacy_path.exists():
+            source_path = legacy_path
+            migrated = True
     config = deepcopy(DEFAULT_CONFIG)
-    if not path.exists():
+    if not source_path.exists():
         return config
     try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
+        loaded = json.loads(source_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return config
     if isinstance(loaded, dict):
@@ -73,6 +95,11 @@ def load_config() -> Dict[str, Any]:
                 config[section].update(values)
             else:
                 config[section] = values
+    if migrated:
+        try:
+            save_config(config)
+        except OSError:
+            pass
     return config
 
 

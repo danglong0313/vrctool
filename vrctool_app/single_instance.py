@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from vrctool_app.config_store import app_root
+from vrctool_app.config_store import runtime_data_root
 
 
 ERROR_ALREADY_EXISTS = 183
@@ -77,7 +77,7 @@ class SingleInstanceGuard:
         return True
 
     def _acquire_lock_file(self) -> bool:
-        self._lock_path = app_root() / "vrctool.lock"
+        self._lock_path = runtime_data_root() / "vrctool.lock"
         self._lock_file = self._lock_path.open("a+", encoding="utf-8")
         if os.name == "posix":
             import fcntl
@@ -100,7 +100,7 @@ class SingleInstanceGuard:
 
 
 def instance_path() -> Path:
-    return app_root() / INSTANCE_FILE
+    return runtime_data_root() / INSTANCE_FILE
 
 
 def read_running_instance() -> Optional[Dict[str, Any]]:

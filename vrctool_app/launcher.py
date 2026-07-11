@@ -12,6 +12,8 @@ from typing import Optional
 
 import uvicorn
 
+from vrctool_app import __version__
+from vrctool_app.installation import InstallationError, launch_uninstaller
 from vrctool_app.lifecycle import set_shutdown_callback
 from vrctool_app.single_instance import SingleInstanceGuard, read_running_instance
 
@@ -66,17 +68,51 @@ def install_signal_handlers() -> None:
     ctypes.windll.kernel32.SetConsoleCtrlHandler(console_handler_ref, True)
 
 
-def parse_args() -> argparse.Namespace:
+def valid_port(value: str) -> int:
+    try:
+        port = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("端口号必须是整数") from exc
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError("端口号必须在 1 到 65535 之间")
+    return port
+
+
+def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="vrctool 网页控制台启动器")
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=("start", "version", "uninstall"),
+        default="start",
+        help="start 启动应用，version 查看版本，uninstall 卸载应用",
+    )
+    parser.add_argument("-v", "--version", action="store_true", help="显示版本号")
     parser.add_argument("--host", default="127.0.0.1", help="网页服务监听地址")
-    parser.add_argument("--port", default=8765, type=int, help="网页服务端口")
+    parser.add_argument("-p", "--port", default=8765, type=valid_port, help="网页服务端口")
     parser.add_argument("--no-browser", action="store_true", help="启动后不自动打开浏览器")
-    return parser.parse_args()
+    parser.add_argument("--silent", action="store_true", help=argparse.SUPPRESS)
+    args = parser.parse_args(argv)
+    if args.version:
+        args.command = "version"
+    return args
 
 
 def main() -> int:
     global server
     args = parse_args()
+    if args.command == "version":
+        print(f"vrctool {__version__}")
+        return 0
+    if args.command == "uninstall":
+        try:
+            uninstaller = launch_uninstaller(silent=args.silent)
+        except InstallationError as exc:
+            print(f"无法卸载 vrctool：{exc}")
+            return 1
+        print(f"卸载程序已启动：{uninstaller}")
+        return 0
+
     url = f"http://{args.host}:{args.port}"
     instance_guard = SingleInstanceGuard()
 

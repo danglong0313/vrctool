@@ -109,6 +109,10 @@ button svg {
   height: 17px;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 input,
 textarea,
 select {
@@ -252,6 +256,85 @@ h3 {
     linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 58%),
     var(--surface);
   padding: 12px;
+}
+
+.update-card {
+  gap: 10px;
+  transition: border-color 180ms ease, background 180ms ease;
+}
+
+.update-card.is-ready {
+  border-color: color-mix(in srgb, var(--good) 52%, transparent);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--good) 12%, transparent), transparent 58%),
+    var(--surface);
+}
+
+.update-card.is-error {
+  border-color: color-mix(in srgb, var(--danger) 52%, transparent);
+}
+
+.version-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 0 8px;
+  color: var(--accent);
+  background: var(--surface);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.update-summary {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.update-summary strong,
+.update-summary small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.update-summary strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.update-summary small {
+  color: var(--muted);
+}
+
+.update-progress {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line-strong) 52%, transparent);
+  overflow: hidden;
+}
+
+.update-progress span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--good));
+  transition: width 180ms ease;
+}
+
+.update-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.update-actions button {
+  width: 100%;
+  min-width: 0;
 }
 
 .side-card-head,

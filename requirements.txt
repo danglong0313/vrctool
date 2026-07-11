@@ -9,3 +9,4 @@ WMI; sys_platform == "win32"
 qrcode[pil]
 pyinstaller
 bleak
+packaging
