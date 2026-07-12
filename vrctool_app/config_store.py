@@ -35,6 +35,13 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "device_name": "",
         "interval": 1.0,
     },
+    "performance": {
+        "broadcast_enabled": False,
+        "interval": 3.0,
+        "low_fps_threshold": 45.0,
+        "show_avg_fps": False,
+        "show_frame_ms": True,
+    },
     "osc": {
         "listen_host": "127.0.0.1",
         "listen_port": 9001,

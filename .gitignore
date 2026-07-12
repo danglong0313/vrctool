@@ -15,6 +15,7 @@ dist/
 *.spec.bak
 
 config.json
+vrctool.instance.json
 *.log
 
 .DS_Store

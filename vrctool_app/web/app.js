@@ -3,11 +3,13 @@ const $ = (id) => document.getElementById(id);
 let currentState = null;
 let pulseEnabled = true;
 let qrModalOpen = false;
+let performanceGrantPending = false;
 const debounceTimers = new Map();
 const sectionTitles = {
   overview: "总览",
   chatbox: "ChatBox",
   heart: "心率广播",
+  performance: "游戏帧率",
   dglab: "郊狼控制",
   osc: "OSC 映射",
   logs: "日志",
@@ -296,11 +298,92 @@ function renderUpdateState(update) {
   }
 }
 
+function performanceValue(value) {
+  const number = Number(value || 0);
+  return number > 0 && Number.isFinite(number) ? number.toFixed(1) : "--";
+}
+
+function renderPerformanceState(performance) {
+  const fps = Number(performance.fps || 0);
+  const hasSample = Boolean(performance.sampling && fps > 0);
+  const failed = ["采样失败", "监控失败", "性能采集不可用"].includes(performance.status);
+  const lowFps = Boolean(performance.low_fps && hasSample);
+  const card = $("performanceCard");
+  const status = $("performanceStatus");
+  const broadcast = $("performanceBroadcast");
+
+  $("performanceFps").textContent = performanceValue(performance.fps);
+  $("performanceAvgFps").textContent = performanceValue(performance.avg_fps);
+  $("performanceFrameMs").textContent = performanceValue(performance.frame_ms);
+  status.textContent = performance.status || "等待启动";
+  status.classList.toggle("is-good", hasSample && !lowFps);
+  status.classList.toggle("is-warn", !hasSample && !failed);
+  status.classList.toggle("is-danger", failed || lowFps);
+  card.classList.toggle("is-low-fps", lowFps);
+  card.classList.toggle("is-error", failed);
+
+  $("performanceWarning").hidden = !lowFps;
+  $("performanceWarningText").textContent = lowFps
+    ? `低于 ${Number(performance.low_fps_threshold || 45).toFixed(1)} FPS`
+    : "低 FPS";
+  $("performanceProcess").textContent = performance.vrchat_running
+    ? `VRChat.exe · PID ${performance.process_id || "-"}`
+    : "VRChat.exe 未运行";
+  $("performanceLastSample").textContent = `最近采样 ${performance.last_sample || "-"}`;
+  $("performanceReason").textContent = performance.reason || "PresentMon 正在采样";
+  $("performanceLastSent").textContent = performance.last_sent
+    ? `最近发送 ${performance.last_sent}`
+    : "尚未发送";
+
+  broadcast.classList.toggle("is-on", Boolean(performance.broadcast_enabled));
+  broadcast.setAttribute("aria-pressed", String(Boolean(performance.broadcast_enabled)));
+  broadcast.disabled = !performance.available;
+  setValueUnlessFocused("performanceInterval", performance.interval || 3);
+  setValueUnlessFocused("performanceThreshold", performance.low_fps_threshold || 45);
+
+  const setMetricToggle = (id, on) => {
+    const button = $(id);
+    button.classList.toggle("is-on", Boolean(on));
+    button.setAttribute("aria-pressed", String(Boolean(on)));
+  };
+  setMetricToggle("performanceShowFps", true);
+  setMetricToggle("performanceShowAvgFps", performance.show_avg_fps);
+  setMetricToggle("performanceShowFrameMs", performance.show_frame_ms);
+  $("performanceShowAvgFps").disabled = !performance.available;
+  $("performanceShowFrameMs").disabled = !performance.available;
+
+  const preview = ["FPS: {fps}"];
+  if (performance.show_avg_fps) preview.push("AVG: {avg_fps}");
+  if (performance.show_frame_ms) preview.push("Frame: {frame_ms}ms");
+  $("performancePreview").textContent = preview.join(" | ");
+
+  const permissionPanel = $("performancePermission");
+  const grantButton = $("grantPerformancePermission");
+  const permissionText = $("performancePermissionText");
+  if (performanceGrantPending) {
+    // A grant request is in flight; leave the panel as the click handler set it.
+  } else if (performance.relogin_required) {
+    permissionPanel.hidden = false;
+    grantButton.hidden = true;
+    permissionText.textContent =
+      "已加入 Performance Log Users 组，请注销并重新登录（或重启）后开始采样。";
+  } else if (performance.needs_permission) {
+    permissionPanel.hidden = false;
+    grantButton.hidden = false;
+    grantButton.disabled = false;
+    permissionText.textContent =
+      "PresentMon 需要 ETW 权限。点此授权会弹出一次 UAC，把当前账户加入 Performance Log Users 组，之后无需以管理员身份运行。";
+  } else {
+    permissionPanel.hidden = true;
+  }
+}
+
 function render(state) {
   if (!state) return;
   currentState = state;
   const { chatbox, device, afk, dglab, osc, logs } = state;
   const heartRate = state.heart_rate || {};
+  const performance = state.performance || {};
   const update = state.update || {};
 
   setPill($("oscState"), osc.running, "OSC 运行", "OSC 停止");
@@ -379,6 +462,7 @@ function render(state) {
     : "-";
   renderCustomOscList(osc.custom_mappings);
   renderHeartRateDevices(heartRate);
+  renderPerformanceState(performance);
   renderUpdateState(update);
 
   $("heartStatus").textContent = heartRate.status || "未连接";
@@ -628,6 +712,55 @@ function bindEvents() {
       enabled: !currentState?.heart_rate?.send_enabled,
       interval,
     });
+  });
+
+  const metricEnabled = (id) => $(id).classList.contains("is-on");
+  const performancePayload = (enabled) => ({
+    enabled,
+    interval: numericInputValue("performanceInterval") || 3,
+    low_fps_threshold: numericInputValue("performanceThreshold") || 45,
+    show_avg_fps: metricEnabled("performanceShowAvgFps"),
+    show_frame_ms: metricEnabled("performanceShowFrameMs"),
+  });
+  const savePerformance = (enabled) =>
+    api("/api/performance/config", performancePayload(enabled)).catch((error) => {
+      $("performanceStatus").textContent = "设置失败";
+      $("performanceStatus").classList.add("is-danger");
+      $("performanceReason").textContent = error.message || String(error);
+    });
+  const toggleMetric = (id) => {
+    const button = $(id);
+    button.classList.toggle("is-on");
+    button.setAttribute("aria-pressed", String(button.classList.contains("is-on")));
+    savePerformance(Boolean(currentState?.performance?.broadcast_enabled));
+  };
+  $("performanceBroadcast").addEventListener("click", () =>
+    savePerformance(!currentState?.performance?.broadcast_enabled),
+  );
+  $("performanceShowAvgFps").addEventListener("click", () =>
+    toggleMetric("performanceShowAvgFps"),
+  );
+  $("performanceShowFrameMs").addEventListener("click", () =>
+    toggleMetric("performanceShowFrameMs"),
+  );
+  $("savePerformanceSettings").addEventListener("click", () =>
+    savePerformance(Boolean(currentState?.performance?.broadcast_enabled)),
+  );
+  $("grantPerformancePermission").addEventListener("click", async () => {
+    const button = $("grantPerformancePermission");
+    const hint = $("performancePermissionText");
+    performanceGrantPending = true;
+    button.disabled = true;
+    hint.textContent = "正在请求授权，请在弹出的 UAC 窗口中点“是”…";
+    try {
+      await api("/api/performance/grant-capture", {});
+    } catch (error) {
+      hint.textContent = error.message || String(error);
+    } finally {
+      performanceGrantPending = false;
+      button.disabled = false;
+      render(currentState);
+    }
   });
 
   $("toggleDglab").addEventListener("click", () => {

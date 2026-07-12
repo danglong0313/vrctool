@@ -8,13 +8,14 @@
 
 - Python 依赖已通过根目录 `requirements.txt` 安装
 - [Inno Setup 6](https://jrsoftware.org/isdl.php)
+- `third_party/presentmon/PresentMon.exe` 为官方 PresentMon 2.4.1 x64 控制台程序，SHA-256 记录在同目录 `README.md`
 
 ## 生成安装包
 
 在项目根目录运行以下 PowerShell 命令，并按发布版本修改 `$version`：
 
 ```powershell
-$version = "2.2.0"
+$version = "2.3.0"
 
 python -c "from pathlib import Path; from PIL import Image; Path('build').mkdir(exist_ok=True); image=Image.open('vrctool_app/assets/logo.png').convert('RGBA'); image.save('build/logo.ico', format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])"
 
@@ -33,16 +34,18 @@ $iscc = @(
 输出文件：
 
 ```text
-dist\vrctool_v2.2.0.exe
-dist\vrctool-setup-2.2.0.exe
+dist\vrctool_v2.3.0.exe
+dist\vrctool-setup-2.3.0.exe
 ```
+
+PyInstaller 会将 `third_party/presentmon` 嵌入独立 EXE。Inno Setup 同时将 `PresentMon.exe` 安装到 `{app}\tools`，并将 MIT 许可证安装到 `{app}\licenses`；安装版优先使用安装目录中的采集程序。
 
 ## 发布更新
 
 1. 将代码版本号和 `$version` 设为相同值。
-2. 创建格式为 `vrctool_v2.2.0` 的 Git 标签和 GitHub Release。
-3. 上传 `vrctool-setup-2.2.0.exe`。安装版会读取 GitHub Release 的 SHA-256 摘要并校验下载文件。
-4. 可同时上传独立的 `vrctool_v2.2.0.exe`，但应用内更新只选择名称包含 `setup` 的安装包。
+2. 创建格式为 `vrctool_v2.3.0` 的 Git 标签和 GitHub Release。
+3. 上传 `vrctool-setup-2.3.0.exe`。安装版会读取 GitHub Release 的 SHA-256 摘要并校验下载文件。
+4. 可同时上传独立的 `vrctool_v2.3.0.exe`，但应用内更新只选择名称包含 `setup` 的安装包。
 
 正式公开分发前，建议使用 Authenticode 证书同时签名应用 EXE 和安装包。
 

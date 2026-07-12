@@ -21,6 +21,7 @@ hiddenimports = (
 datas = [
     (str(project_root / "vrctool_app" / "web"), "vrctool_app/web"),
     (str(project_root / "vrctool_app" / "assets"), "vrctool_app/assets"),
+    (str(project_root / "third_party" / "presentmon"), "third_party/presentmon"),
 ]
 
 a = Analysis(

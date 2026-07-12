@@ -19,6 +19,7 @@ from vrctool_app.heartrate import HeartRateManager
 from vrctool_app.lifecycle import request_shutdown
 from vrctool_app.network import get_network_interfaces, pick_default_lan_ip
 from vrctool_app.osc import VRChatOSCManager
+from vrctool_app.performance import PerformanceManager
 from vrctool_app.state import RuntimeState
 from vrctool_app.update_manager import UpdateError, UpdateManager
 
@@ -31,11 +32,12 @@ app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
 state = RuntimeState()
 config = load_config()
-for config_section in ("chatbox", "dglab", "heart_rate", "osc"):
+for config_section in ("chatbox", "dglab", "heart_rate", "performance", "osc"):
     state.patch(config_section, **config.get(config_section, {}))
 updates = UpdateManager(state)
 chatbox = ChatboxManager(state)
 heart_rate = HeartRateManager(state, chatbox.send_message)
+performance = PerformanceManager(state, chatbox.send_message)
 dglab = DGLabManager(state)
 vrchat_osc = VRChatOSCManager(state, dglab, chatbox)
 
@@ -129,6 +131,14 @@ class HeartRateChatboxPayload(BaseModel):
     interval: float = 1.0
 
 
+class PerformanceConfigPayload(BaseModel):
+    enabled: bool = False
+    interval: float = 3.0
+    low_fps_threshold: float = 45.0
+    show_avg_fps: bool = False
+    show_frame_ms: bool = True
+
+
 class OSCStartPayload(BaseModel):
     host: str = "127.0.0.1"
     port: int = 9001
@@ -163,6 +173,7 @@ async def startup() -> None:
     state.patch("device", **get_device_info())
     chatbox_config = state.snapshot()["chatbox"]
     chatbox.configure(chatbox_config["host"], chatbox_config["port"])
+    await performance.start()
     try:
         osc_config = state.snapshot()["osc"]
         if osc_config.get("enabled", True):
@@ -184,6 +195,7 @@ async def startup() -> None:
 @app.on_event("shutdown")
 async def shutdown() -> None:
     vrchat_osc.stop()
+    await performance.shutdown()
     await heart_rate.shutdown()
     await chatbox.shutdown()
     await dglab.stop()
@@ -445,6 +457,35 @@ async def toggle_heart_rate_chatbox(payload: HeartRateChatboxPayload):
         state.patch("heart_rate", interval=interval)
     update_config("heart_rate", interval=state.snapshot()["heart_rate"]["interval"])
     return state.snapshot()
+
+
+@app.post("/api/performance/config")
+async def configure_performance(payload: PerformanceConfigPayload):
+    await performance.configure(
+        payload.enabled,
+        payload.interval,
+        payload.low_fps_threshold,
+        payload.show_avg_fps,
+        payload.show_frame_ms,
+    )
+    snapshot = state.snapshot()["performance"]
+    update_config(
+        "performance",
+        broadcast_enabled=snapshot["broadcast_enabled"],
+        interval=snapshot["interval"],
+        low_fps_threshold=snapshot["low_fps_threshold"],
+        show_avg_fps=snapshot["show_avg_fps"],
+        show_frame_ms=snapshot["show_frame_ms"],
+    )
+    return state.snapshot()
+
+
+@app.post("/api/performance/grant-capture")
+async def grant_performance_capture():
+    result = await performance.request_capture_permission()
+    snapshot = state.snapshot()
+    snapshot["result"] = result
+    return snapshot
 
 
 @app.post("/api/osc/start")

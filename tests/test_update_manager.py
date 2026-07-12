@@ -28,7 +28,7 @@ class StubUpdateManager(UpdateManager):
 class UpdateManagerTests(unittest.TestCase):
     def test_extract_version_supports_old_and_new_tag_formats(self) -> None:
         self.assertEqual(str(extract_version("vrctool_v2.1")), "2.1")
-        self.assertEqual(str(extract_version("v2.2.0")), "2.2.0")
+        self.assertEqual(str(extract_version("v2.3.0")), "2.3.0")
 
     def test_select_installer_asset_prefers_vrctool_setup(self) -> None:
         selected = select_installer_asset(

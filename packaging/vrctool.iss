@@ -44,6 +44,8 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 
 [Files]
 Source: "..\dist\vrctool_v{#MyAppVersion}.exe"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
+Source: "..\third_party\presentmon\PresentMon.exe"; DestDir: "{app}\tools"; DestName: "PresentMon.exe"; Flags: ignoreversion
+Source: "..\third_party\presentmon\LICENSE.txt"; DestDir: "{app}\licenses"; DestName: "PresentMon-LICENSE.txt"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\vrctool"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"

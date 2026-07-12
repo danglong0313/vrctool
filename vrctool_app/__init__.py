@@ -1,5 +1,5 @@
-"""Web-based VRChat OSC controller for chatbox, device status, AFK, and DG-LAB."""
+"""Web-based VRChat OSC, ChatBox, performance, and DG-LAB controller."""
 
 __all__ = ["__version__"]
 
-__version__ = "2.2.0"
+__version__ = "2.3.0"
