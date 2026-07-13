@@ -9,6 +9,7 @@ from PyInstaller.utils.hooks import collect_submodules
 spec_base = Path(SPECPATH).resolve()
 project_root = spec_base if (spec_base / "vrctool_app").exists() else spec_base.parent
 exe_name = os.environ.get("VRCTOOL_EXE_NAME", "vrctool")
+bundle_name = os.environ.get("VRCTOOL_BUNDLE_NAME", exe_name)
 icon_path = Path(os.environ.get("VRCTOOL_ICON_PATH", project_root / "build" / "logo.ico"))
 
 hiddenimports = (
@@ -42,14 +43,13 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name=exe_name,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=True,
@@ -59,4 +59,14 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=str(icon_path) if icon_path.exists() else None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name=bundle_name,
 )

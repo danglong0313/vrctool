@@ -14,14 +14,15 @@
 
 ## 功能
 
-- ChatBox 自定义文本循环发送：点击开始后立即发送，并每 3 秒刷新一次。
+- ChatBox 自定义文本循环发送：单独开启时立即发送，并每 3 秒刷新一次。
 - ChatBox 硬件信息发送：CPU、GPU、显存、内存信息。
 - ChatBox 挂机计时发送。
+- ChatBox 批量轮播：同时开启多个广播功能时，按照固定顺序逐项发送，避免各功能抢占聊天框。
 - 心率广播：扫描支持标准蓝牙 Heart Rate Service 的手表/心率带，实时读取 BPM 并发送到 VRChat ChatBox。
-- 游戏帧率广播：使用 PresentMon 采集 `VRChat.exe` 的呈现事件，显示实时 FPS、5 秒平均 FPS 和帧时间，并按独立间隔发送到 ChatBox。
+- 游戏帧率广播：使用 PresentMon 采集 `VRChat.exe` 的呈现事件，显示实时 FPS、5 秒平均 FPS 和帧时间，并发送到 ChatBox。
 - DG-LAB 郊狼 3.0 WebSocket 连接：网页按钮弹出二维码，设备连接后自动切换为取消连接。
 - DG-LAB A/B 通道强度、波形、上限、面板模式、交互模式控制。
-- DG-LAB 状态发送到 VRChat ChatBox，更新时间为 1 秒。
+- DG-LAB 状态发送到 VRChat ChatBox，状态更新时间为 1 秒。
 - OSC 映射：支持默认 A/B 参数，也支持自定义 OSC 参数。
 - 自定义 OSC 参数可选择 A、B、A+B 通道，并可用勾选框控制是否生效。
 - 配置自动保存到 `config.json`，重启后继续生效。
@@ -29,14 +30,16 @@
 - 控制台式网页界面：左侧分区导航和基础设置，右侧任务工作区，支持浅色/深色主题切换。
 - 郊狼强度环形可视化，会随 A/B 通道强度实时变化。
 
-## v2.3.0 更新内容
+## v2.3.1 更新内容
 
 - 新增 `游戏帧率` 页面和 VRChat 实时 FPS ChatBox 广播。
 - 使用 PresentMon 按 `VRChat.exe` PID 采集 Windows 呈现事件，不读取游戏内存、不注入游戏，也不使用 CPU/GPU 利用率估算 FPS。
 - 自动检测 VRChat 启动、关闭和重启，并在新进程出现后重新绑定采集器。
 - 支持当前 FPS、最近 5 秒平均 FPS、帧时间、低 FPS 阈值与网页告警。
 - 广播默认每 3 秒发送，启用或恢复采样后立即发送一次；用开关按钮选择广播 `当前 FPS`（常开）、`平均 FPS`、`帧时间`。
-- 安装包和独立 EXE 均包含 PresentMon 2.4.1，关闭 vrctool 时会清理监控任务和采集进程。
+- 新增 ChatBox 批量轮播：同时开启多个广播功能时，按“自定义文字 -> 设备信息 -> 挂机计时 -> 心率 -> 游戏帧率 -> 郊狼状态”依次发送，避免抢占聊天框。
+- 安装版改为目录包架构，依赖在安装时展开到程序目录，启动时不再重复解压单文件程序；应用内更新仍使用安装包覆盖升级并保留用户配置。
+- 安装包和便携目录包均包含 PresentMon 2.4.1，关闭 vrctool 时会清理监控任务和采集进程。
 
 ## 环境
 
@@ -51,19 +54,19 @@
 
 ### 使用安装包（推荐）
 
-[GitHub Releases](https://github.com/danglong0313/vrctool/releases) 中会提供以下两种 Windows 文件：
+[GitHub Releases](https://github.com/danglong0313/vrctool/releases) 只提供 Windows 安装包：
 
 | 文件名                      | 用途                                                             |
 | --------------------------- | ---------------------------------------------------------------- |
-| `vrctool-setup-2.3.0.exe` | 推荐普通用户使用的安装包，会创建安装记录、快捷方式并配置命令行。 |
-| `vrctool_v2.3.0.exe`      | 独立主程序，不执行安装，也不会自动添加快捷方式或命令行路径。     |
+| `vrctool-setup-2.3.1.exe` | 安装包，会创建安装记录、快捷方式并配置命令行。 |
 
 安装步骤：
 
-1. 从 [GitHub Releases](https://github.com/danglong0313/vrctool/releases) 下载 `vrctool-setup-2.3.0.exe`。
-2. 双击安装包并按照提示完成安装，不需要管理员权限。
-3. 从开始菜单或桌面快捷方式启动 vrctool。
-4. 如需使用命令行，请在安装完成后重新打开 PowerShell 或命令提示符。
+1. 从 [GitHub Releases](https://github.com/danglong0313/vrctool/releases) 下载 `vrctool-setup-2.3.1.exe`。
+2. 双击安装包；首屏可在“简体中文”和 English 之间切换。
+3. 按照提示完成安装，不需要管理员权限。
+4. 从开始菜单或桌面快捷方式启动 vrctool。
+5. 如需使用命令行，请在安装完成后重新打开 PowerShell 或命令提示符。
 
 当前安装包尚未进行代码签名，Windows SmartScreen 可能显示“未知发布者”。请确认安装包来自本项目的 GitHub Releases。
 
@@ -87,6 +90,7 @@ C:\Users\<用户名>\AppData\Local\Programs\vrctool
 | ------------ | ------------------------------------------------ |
 | 程序目录     | `%LOCALAPPDATA%\Programs\vrctool`              |
 | 主程序       | `%LOCALAPPDATA%\Programs\vrctool\vrctool.exe`  |
+| 运行依赖目录 | `%LOCALAPPDATA%\Programs\vrctool\_internal`    |
 | 帧率采集器   | `%LOCALAPPDATA%\Programs\vrctool\tools\PresentMon.exe` |
 | PresentMon 许可 | `%LOCALAPPDATA%\Programs\vrctool\licenses\PresentMon-LICENSE.txt` |
 | 默认卸载程序 | `%LOCALAPPDATA%\Programs\vrctool\unins000.exe` |
@@ -184,6 +188,16 @@ ChatBox 默认发送到：
 127.0.0.1:9000
 ```
 
+## ChatBox 批量轮播
+
+`ChatBox` 分区中的批量轮播默认开启。只开启一个广播功能时，该功能仍按自己的间隔直接发送；同时开启两个或更多功能后，vrctool 会按以下顺序每次只发送一项：
+
+```text
+自定义文字 -> 设备信息 -> 挂机计时 -> 心率 -> 游戏帧率 -> 郊狼状态
+```
+
+未开启或暂时没有有效内容的项目会自动跳过，同一项目尚未发送的旧内容会被最新状态替换。网页可调整全局“每项间隔”，并查看当前发送项和下一项。关闭批量轮播后，各功能恢复独立发送。
+
 ## DG-LAB 连接
 
 1. 在网页 DG-LAB 分区选择扫码 IP 和 WS 端口。
@@ -216,7 +230,7 @@ ChatBox 默认发送到：
 FPS: 72.3 | Frame: 13.9ms
 ```
 
-三项全开时的消息形如 `FPS: 72.3 | AVG: 69.0 | Frame: 13.9ms`。采样与 ChatBox 广播分别运行，PresentMon 会持续更新网页，但不会每帧发送消息。VRChat 关闭或帧数据失效后会自动停发；VRChat 重新启动后，vrctool 会绑定新的 PID 并恢复采样和广播。
+三项全开时的消息形如 `FPS: 72.3 | AVG: 69.0 | Frame: 13.9ms`。采样与 ChatBox 广播分别运行，PresentMon 会持续更新网页，但不会每帧发送消息。批量轮播且同时启用其他广播时，帧率消息会进入统一轮播。VRChat 关闭或帧数据失效后会自动停发；VRChat 重新启动后，vrctool 会绑定新的 PID 并恢复采样和广播。
 
 该功能使用 [Intel PresentMon](https://github.com/GameTechDev/PresentMon) 2.4.1 的 Windows ETW 呈现事件，不读取 VRChat 内存、不向游戏注入代码，也不依赖 VRChat OSC 获取 FPS。PresentMon 启动 ETW 会话需要以下任一条件：
 
@@ -250,18 +264,19 @@ config.json
 %LOCALAPPDATA%\vrctool\config.json
 ```
 
-这个文件保存端口、OSC 映射、DG-LAB 设置、ChatBox 文本、心率设备地址、帧率广播开关、发送间隔、阈值和广播指标开关等本地配置。配置与程序文件分开保存，覆盖升级时会继续保留。它是本机配置文件，不会提交到 Git 仓库。
+这个文件保存端口、OSC 映射、DG-LAB 设置、ChatBox 文本、批量轮播开关和间隔、心率设备地址、帧率广播开关、发送间隔、阈值和广播指标开关等本地配置。配置与程序文件分开保存，覆盖升级时会继续保留。它是本机配置文件，不会提交到 Git 仓库。
 
 ## 打包 EXE
 
 项目不保留固定的 `build_exe.bat` 或 `build_exe.ps1` 打包脚本。
 
-需要打包时按照 [packaging/README.md](packaging/README.md) 执行一次性 PyInstaller 和 Inno Setup 命令，输出文件名形如：
+需要打包时按照 [packaging/README.md](packaging/README.md) 执行一次性 PyInstaller 和 Inno Setup 命令，最终只输出安装包：
 
 ```text
-dist\vrctool_v2.3.0.exe
-dist\vrctool-setup-2.3.0.exe
+dist\vrctool-setup-2.3.1.exe
 ```
+
+目录包中的 `_internal` 是安装器的临时构建内容，不单独发布；安装器会自动将其放入默认程序目录。应用内更新只下载并运行 `setup` 安装包，更新时会替换旧 `_internal` 内容，用户配置仍保存在 `%LOCALAPPDATA%\vrctool\config.json`。安装器首屏支持“简体中文”和 English 切换。
 
 `vrctool_app/assets/logo.png` 会作为网页 Logo，也会在打包时转换为 exe 图标。
 
@@ -276,7 +291,7 @@ vrctool_app/
   single_instance.py    防止多开导致组件冲突
   installation.py       查找并启动 Windows 卸载程序
   config_store.py       用户配置路径和旧配置迁移
-  chatbox.py            ChatBox 文本、设备信息、挂机计时发送
+  chatbox.py            ChatBox 文本、设备信息、挂机计时和统一轮播
   dglab.py              DG-LAB WebSocket、强度、波形和二维码连接
   heartrate.py          蓝牙心率读取和 ChatBox 广播
   performance.py        VRChat 进程检测、PresentMon 采样、FPS 统计和广播

@@ -36,8 +36,14 @@ for config_section in ("chatbox", "dglab", "heart_rate", "performance", "osc"):
     state.patch(config_section, **config.get(config_section, {}))
 updates = UpdateManager(state)
 chatbox = ChatboxManager(state)
-heart_rate = HeartRateManager(state, chatbox.send_message)
-performance = PerformanceManager(state, chatbox.send_message)
+heart_rate = HeartRateManager(
+    state,
+    lambda message: chatbox.send_message(message, source="heart_rate"),
+)
+performance = PerformanceManager(
+    state,
+    lambda message: chatbox.send_message(message, source="performance"),
+)
 dglab = DGLabManager(state)
 vrchat_osc = VRChatOSCManager(state, dglab, chatbox)
 
@@ -60,6 +66,11 @@ def update_config(section: str, **values) -> None:
 class ChatboxConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 9000
+
+
+class ChatboxBatchPayload(BaseModel):
+    enabled: bool = True
+    interval: float = 3.0
 
 
 class MessagePayload(BaseModel):
@@ -173,7 +184,9 @@ async def startup() -> None:
     state.patch("device", **get_device_info())
     chatbox_config = state.snapshot()["chatbox"]
     chatbox.configure(chatbox_config["host"], chatbox_config["port"])
+    await chatbox.start()
     await performance.start()
+    chatbox.refresh_batch_state()
     try:
         osc_config = state.snapshot()["osc"]
         if osc_config.get("enabled", True):
@@ -281,6 +294,18 @@ async def configure_chatbox(payload: ChatboxConfig):
 @app.post("/api/chatbox/send")
 async def send_chatbox(payload: MessagePayload):
     chatbox.send_message(payload.message[:240])
+    return state.snapshot()
+
+
+@app.post("/api/chatbox/batch")
+async def configure_chatbox_batch(payload: ChatboxBatchPayload):
+    await chatbox.configure_batch(payload.enabled, payload.interval)
+    snapshot = state.snapshot()["chatbox"]
+    update_config(
+        "chatbox",
+        batch_enabled=snapshot["batch_enabled"],
+        batch_interval=snapshot["batch_interval"],
+    )
     return state.snapshot()
 
 
@@ -455,6 +480,7 @@ async def toggle_heart_rate_chatbox(payload: HeartRateChatboxPayload):
     else:
         await heart_rate.stop_chatbox()
         state.patch("heart_rate", interval=interval)
+    chatbox.source_changed("heart_rate")
     update_config("heart_rate", interval=state.snapshot()["heart_rate"]["interval"])
     return state.snapshot()
 
@@ -468,6 +494,7 @@ async def configure_performance(payload: PerformanceConfigPayload):
         payload.show_avg_fps,
         payload.show_frame_ms,
     )
+    chatbox.source_changed("performance")
     snapshot = state.snapshot()["performance"]
     update_config(
         "performance",

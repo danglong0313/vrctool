@@ -5,6 +5,14 @@ let pulseEnabled = true;
 let qrModalOpen = false;
 let performanceGrantPending = false;
 const debounceTimers = new Map();
+const batchSourceLabels = {
+  custom: "自定义文字",
+  device: "设备信息",
+  afk: "挂机计时",
+  heart_rate: "心率",
+  performance: "游戏帧率",
+  dglab: "郊狼状态",
+};
 const sectionTitles = {
   overview: "总览",
   chatbox: "ChatBox",
@@ -378,6 +386,43 @@ function renderPerformanceState(performance) {
   }
 }
 
+function renderChatboxBatch(chatbox) {
+  const enabled = Boolean(chatbox.batch_enabled);
+  const running = Boolean(chatbox.batch_running);
+  const active = Array.isArray(chatbox.batch_active_sources)
+    ? chatbox.batch_active_sources
+    : [];
+  const order = Array.isArray(chatbox.batch_order)
+    ? chatbox.batch_order
+    : Object.keys(batchSourceLabels);
+  const current = chatbox.batch_current_source || "";
+  const next = chatbox.batch_next_source || "";
+  const toggle = $("batchEnabled");
+  toggle.classList.toggle("is-on", enabled);
+  toggle.setAttribute("aria-pressed", String(enabled));
+  setValueUnlessFocused("batchInterval", chatbox.batch_interval || 3);
+  $("batchCurrentSource").value = batchSourceLabels[current] || "等待发送";
+  $("batchNextSource").value = batchSourceLabels[next] || "-";
+
+  const status = $("batchStatus");
+  status.textContent = !enabled
+    ? "已关闭"
+    : running
+      ? `轮播中 · ${active.length} 项`
+      : "等待多个项目";
+  status.classList.toggle("is-good", running);
+  status.classList.toggle("is-warn", enabled && !running);
+
+  $("batchSequence").innerHTML = order
+    .map((source, index) => {
+      const classes = ["batch-source"];
+      if (active.includes(source)) classes.push("is-active");
+      if (source === current) classes.push("is-current");
+      return `<span class="${classes.join(" ")}"><b>${index + 1}</b><span>${batchSourceLabels[source] || source}</span></span>`;
+    })
+    .join("");
+}
+
 function render(state) {
   if (!state) return;
   currentState = state;
@@ -413,6 +458,7 @@ function render(state) {
     ? '<i data-lucide="square"></i>停止挂机'
     : '<i data-lucide="timer"></i>挂机计时';
   $("dglabChatboxStatus").checked = Boolean(chatbox.dglab_enabled);
+  renderChatboxBatch(chatbox);
 
   if (device.cpu) {
     $("cpuUsage").textContent = `${Math.round(device.cpu.usage)}%`;
@@ -531,6 +577,12 @@ function bindEvents() {
       };
     });
 
+  const syncBatchSettings = () =>
+    postDebounced("chatbox-batch", "/api/chatbox/batch", () => ({
+      enabled: Boolean(currentState?.chatbox?.batch_enabled),
+      interval: numericInputValue("batchInterval") || 3,
+    }));
+
   const syncAfkInterval = () =>
     postDebounced("afk-interval", "/api/chatbox/afk", () => {
       const interval = numericInputValue("afkInterval");
@@ -615,6 +667,13 @@ function bindEvents() {
   $("deviceInterval").addEventListener("input", syncDeviceInterval);
   $("afkInterval").addEventListener("input", syncAfkInterval);
   $("heartInterval").addEventListener("input", syncHeartRateInterval);
+  $("batchInterval").addEventListener("input", syncBatchSettings);
+  $("batchEnabled").addEventListener("click", () =>
+    api("/api/chatbox/batch", {
+      enabled: !currentState?.chatbox?.batch_enabled,
+      interval: numericInputValue("batchInterval") || 3,
+    }),
+  );
   const syncCustomMessage = (sourceId, mirrorId) => {
     const value = $(sourceId).value;
     if (document.activeElement !== $(mirrorId)) {

@@ -31,29 +31,44 @@ LicenseFile=..\LICENSE
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+ShowLanguageDialog=auto
 CloseApplications=yes
 RestartApplications=no
 AppMutex=Local\vrctool-single-instance
 ChangesEnvironment=yes
 
 [Languages]
+Name: "chinesesimp"; MessagesFile: "languages\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加快捷方式"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalShortcuts}"; Flags: unchecked
+
+[CustomMessages]
+chinesesimp.CreateDesktopIcon=创建桌面快捷方式
+chinesesimp.AdditionalShortcuts=附加快捷方式
+chinesesimp.UninstallShortcut=卸载 vrctool
+chinesesimp.LaunchApp=启动 vrctool
+english.CreateDesktopIcon=Create a desktop shortcut
+english.AdditionalShortcuts=Additional shortcuts
+english.UninstallShortcut=Uninstall vrctool
+english.LaunchApp=Launch vrctool
 
 [Files]
-Source: "..\dist\vrctool_v{#MyAppVersion}.exe"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
+Source: "..\build\package\vrctool_v{#MyAppVersion}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\third_party\presentmon\PresentMon.exe"; DestDir: "{app}\tools"; DestName: "PresentMon.exe"; Flags: ignoreversion
 Source: "..\third_party\presentmon\LICENSE.txt"; DestDir: "{app}\licenses"; DestName: "PresentMon-LICENSE.txt"; Flags: ignoreversion
 
+[InstallDelete]
+Type: filesandordirs; Name: "{app}\_internal"
+
 [Icons]
 Name: "{group}\vrctool"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
-Name: "{group}\Uninstall vrctool"; Filename: "{uninstallexe}"; WorkingDir: "{app}"
+Name: "{group}\{cm:UninstallShortcut}"; Filename: "{uninstallexe}"; WorkingDir: "{app}"
 Name: "{autodesktop}\vrctool"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "启动 vrctool"; Flags: nowait postinstall skipifsilent; Check: ShouldLaunch
+Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "{cm:LaunchApp}"; Flags: nowait postinstall skipifsilent; Check: ShouldLaunch
 Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Flags: nowait skipifnotsilent; Check: ShouldLaunch
 
 [Code]

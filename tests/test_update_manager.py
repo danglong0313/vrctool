@@ -28,19 +28,19 @@ class StubUpdateManager(UpdateManager):
 class UpdateManagerTests(unittest.TestCase):
     def test_extract_version_supports_old_and_new_tag_formats(self) -> None:
         self.assertEqual(str(extract_version("vrctool_v2.1")), "2.1")
-        self.assertEqual(str(extract_version("v2.3.0")), "2.3.0")
+        self.assertEqual(str(extract_version("v2.3.1")), "2.3.1")
 
     def test_select_installer_asset_prefers_vrctool_setup(self) -> None:
         selected = select_installer_asset(
             {
                 "assets": [
                     {"name": "helper-setup.exe"},
-                    {"name": "vrctool_v2.3.0.exe"},
-                    {"name": "vrctool-setup-2.3.0.exe"},
+                    {"name": "release-notes-2.3.1.txt"},
+                    {"name": "vrctool-setup-2.3.1.exe"},
                 ]
             }
         )
-        self.assertEqual(selected["name"], "vrctool-setup-2.3.0.exe")
+        self.assertEqual(selected["name"], "vrctool-setup-2.3.1.exe")
 
     def test_normalize_sha256_requires_a_complete_digest(self) -> None:
         digest = "a" * 64

@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>vrctool</title>
     <meta http-equiv="Cache-Control" content="no-store" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260712-performance-3" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260713-chatbox-batch-1" />
     <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-    <script defer src="/static/app.js?v=20260712-performance-3"></script>
+    <script defer src="/static/app.js?v=20260713-chatbox-batch-1"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -66,7 +66,7 @@
         <section class="side-card update-card" id="updateCard" aria-labelledby="updateCardTitle">
           <div class="side-card-head">
             <span id="updateCardTitle">应用更新</span>
-            <span class="version-badge" id="currentVersion">v2.3.0</span>
+            <span class="version-badge" id="currentVersion">v2.3.1</span>
           </div>
           <div class="update-summary">
             <strong id="updateTitle">等待检查</strong>
@@ -222,6 +222,41 @@
                 <i data-lucide="timer"></i>
                 挂机计时
               </button>
+            </div>
+          </section>
+
+          <section class="task-card wide batch-card">
+            <div class="panel-head">
+              <h3>ChatBox 批量轮播</h3>
+              <span class="chip is-warn" id="batchStatus">等待多个项目</span>
+            </div>
+            <div class="toggle-row">
+              <span>轮播开关</span>
+              <button
+                class="switch"
+                id="batchEnabled"
+                type="button"
+                aria-label="切换 ChatBox 批量轮播"
+                aria-pressed="true"
+              ></button>
+            </div>
+            <div class="batch-summary-grid">
+              <label>
+                <span>每项间隔（秒）</span>
+                <input id="batchInterval" type="number" min="1" max="60" step="0.5" value="3" />
+              </label>
+              <label>
+                <span>当前发送</span>
+                <input id="batchCurrentSource" value="等待发送" disabled />
+              </label>
+              <label>
+                <span>下一项</span>
+                <input id="batchNextSource" value="-" disabled />
+              </label>
+            </div>
+            <div class="field-block">
+              <span class="field-label">轮播顺序</span>
+              <div class="batch-sequence" id="batchSequence"></div>
             </div>
           </section>
         </section>

@@ -16,6 +16,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "afk_interval": 3.0,
         "custom_interval": 3.0,
         "custom_message": "",
+        "batch_enabled": True,
+        "batch_interval": 3.0,
     },
     "dglab": {
         "port": 5678,
