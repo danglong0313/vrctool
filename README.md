@@ -27,10 +27,10 @@
 - 自定义 OSC 参数可选择 A、B、A+B 通道，并可用勾选框控制是否生效。
 - 配置自动保存到 `config.json`，重启后继续生效。
 - 启动器带单实例保护，重复打开时不会再启动第二套后端组件。
-- 控制台式网页界面：左侧分区导航和基础设置，右侧任务工作区，支持浅色/深色主题切换。
+- 控制台式网页界面：左侧分区导航和基础设置弹窗，右侧任务工作区，支持浅色/深色主题切换。
 - 郊狼强度环形可视化，会随 A/B 通道强度实时变化。
 
-## v2.3.1 更新内容
+## v2.3.2 更新内容
 
 - 新增 `游戏帧率` 页面和 VRChat 实时 FPS ChatBox 广播。
 - 使用 PresentMon 按 `VRChat.exe` PID 采集 Windows 呈现事件，不读取游戏内存、不注入游戏，也不使用 CPU/GPU 利用率估算 FPS。
@@ -39,7 +39,11 @@
 - 广播默认每 3 秒发送，启用或恢复采样后立即发送一次；用开关按钮选择广播 `当前 FPS`（常开）、`平均 FPS`、`帧时间`。
 - 新增 ChatBox 批量轮播：同时开启多个广播功能时，按“自定义文字 -> 设备信息 -> 挂机计时 -> 心率 -> 游戏帧率 -> 郊狼状态”依次发送，避免抢占聊天框。
 - 安装版改为目录包架构，依赖在安装时展开到程序目录，启动时不再重复解压单文件程序；应用内更新仍使用安装包覆盖升级并保留用户配置。
-- 安装包和便携目录包均包含 PresentMon 2.4.1，关闭 vrctool 时会清理监控任务和采集进程。
+- 安装包包含 PresentMon 2.4.1，关闭 vrctool 时会清理监控任务和采集进程。
+- 新增命令行更新：`vrctool upgrade` 与 `vrctool -u` 可检查、下载、校验并安装新版本。
+- 网页端口写入本地配置，支持命令行和网页“基础设置”弹窗修改；启动前会检测端口占用，避免后端组件半启动。
+- `vrctool -p <端口>` / `vrctool setport <端口>` 只保存默认端口，`vrctool start -p <端口>` 仅本次临时使用指定端口。
+- 新版本首次启动时自动显示本地更新内容；勾选“不再提醒”后当前版本不再弹出，下一版本会自动恢复提醒。
 
 ## 环境
 
@@ -58,11 +62,11 @@
 
 | 文件名                      | 用途                                                             |
 | --------------------------- | ---------------------------------------------------------------- |
-| `vrctool-setup-2.3.1.exe` | 安装包，会创建安装记录、快捷方式并配置命令行。 |
+| `vrctool-setup-2.3.2.exe` | 安装包，会创建安装记录、快捷方式并配置命令行。 |
 
 安装步骤：
 
-1. 从 [GitHub Releases](https://github.com/danglong0313/vrctool/releases) 下载 `vrctool-setup-2.3.1.exe`。
+1. 从 [GitHub Releases](https://github.com/danglong0313/vrctool/releases) 下载 `vrctool-setup-2.3.2.exe`。
 2. 双击安装包；首屏可在“简体中文”和 English 之间切换。
 3. 按照提示完成安装，不需要管理员权限。
 4. 从开始菜单或桌面快捷方式启动 vrctool。
@@ -135,14 +139,25 @@ vrctool start
 vrctool version
 vrctool -v
 vrctool -p 8877
+vrctool setport 8877
 vrctool start -p 8877
+vrctool upgrade
+vrctool -u
+vrctool upgrade --check
 vrctool uninstall
 ```
 
-- `start`：启动应用，省略命令时也会启动。
+- `start`：使用配置文件中的默认网页端口启动应用，省略命令时也会启动。
 - `version` / `-v`：显示当前版本号。
-- `-p` / `--port`：指定网页服务端口，范围为 `1-65535`。
+- `-p <端口>` / `setport <端口>`：保存默认网页端口并退出，不启动应用。
+- `start -p <端口>`：仅本次使用指定端口启动，不写入配置文件。
+- `upgrade` / `-u`：检查新版本，下载安装包，通过 SHA-256 校验后启动覆盖更新。
+- `upgrade --check`：只检查是否存在新版本，不下载或安装。
 - `uninstall`：关闭正在运行的 vrctool，并启动卸载程序。
+
+启动器会在加载 OSC、DG-LAB 等组件前检测网页端口。端口被占用时会停止启动并显示可直接执行的换端口命令。
+
+网页左侧的“基础设置”按钮会打开设置弹窗，可修改默认网页端口、ChatBox 地址与发送间隔。网页端口保存后在下次启动生效，弹窗会分别显示当前运行端口和下次启动端口。
 
 安装目录中也提供可直接双击的卸载入口：
 
@@ -162,11 +177,20 @@ vrctool uninstall
 
 ## 应用更新
 
-安装版会在启动后检查 GitHub Releases，也可以在网页左侧的 `应用更新` 区域手动检查。
+安装版会在启动后检查 GitHub Releases，也可以在网页左侧的 `应用更新` 区域或命令行中手动检查。
 
 发现新版本后，可以直接下载安装包。下载完成并通过 SHA-256 校验后，点击 `安装并重启`，当前服务会正常退出，安装器覆盖旧版本并重新启动应用。
 
+更新到新版本后，启动时会自动显示该版本的更新内容。直接关闭且不勾选时，本次运行不再重复弹出，但下次启动仍会显示；勾选“不再提醒”后，配置文件会记录当前版本号，同一版本以后不再弹出。安装下一版本时版本号自动失配，因此无需手动清除设置即可恢复提醒。
+
 源码运行模式可以查看新版本，但不会自动安装。
+
+命令行更新示例：
+
+```powershell
+vrctool upgrade --check
+vrctool upgrade
+```
 
 ## VRChat 设置
 
@@ -264,7 +288,7 @@ config.json
 %LOCALAPPDATA%\vrctool\config.json
 ```
 
-这个文件保存端口、OSC 映射、DG-LAB 设置、ChatBox 文本、批量轮播开关和间隔、心率设备地址、帧率广播开关、发送间隔、阈值和广播指标开关等本地配置。配置与程序文件分开保存，覆盖升级时会继续保留。它是本机配置文件，不会提交到 Git 仓库。
+这个文件在 `app.web_port` 中保存默认网页端口，在 `app.dismissed_release_notes_version` 中保存已关闭提醒的版本号，同时保存 OSC 映射、DG-LAB 设置、ChatBox 文本、批量轮播开关和间隔、心率设备地址、帧率广播开关、发送间隔、阈值和广播指标开关等本地配置。配置与程序文件分开保存，覆盖升级时会继续保留。它是本机配置文件，不会提交到 Git 仓库。
 
 ## 打包 EXE
 
@@ -273,7 +297,7 @@ config.json
 需要打包时按照 [packaging/README.md](packaging/README.md) 执行一次性 PyInstaller 和 Inno Setup 命令，最终只输出安装包：
 
 ```text
-dist\vrctool-setup-2.3.1.exe
+dist\vrctool-setup-2.3.2.exe
 ```
 
 目录包中的 `_internal` 是安装器的临时构建内容，不单独发布；安装器会自动将其放入默认程序目录。应用内更新只下载并运行 `setup` 安装包，更新时会替换旧 `_internal` 内容，用户配置仍保存在 `%LOCALAPPDATA%\vrctool\config.json`。安装器首屏支持“简体中文”和 English 切换。
@@ -297,6 +321,7 @@ vrctool_app/
   performance.py        VRChat 进程检测、PresentMon 采样、FPS 统计和广播
   osc.py                VRChat OSC 监听和映射
   update_manager.py     GitHub Release 检查、下载和更新安装
+  release_notes.py      当前版本更新内容和按版本提醒判断
   assets/               Logo 等资源
   web/                  网页前端
 packaging/              PyInstaller 和 Inno Setup 打包配置

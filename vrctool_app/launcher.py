@@ -13,9 +13,13 @@ from typing import Optional
 import uvicorn
 
 from vrctool_app import __version__
+from vrctool_app.config_store import get_configured_web_port, set_configured_web_port
 from vrctool_app.installation import InstallationError, launch_uninstaller
 from vrctool_app.lifecycle import set_shutdown_callback
+from vrctool_app.network import is_tcp_port_available
 from vrctool_app.single_instance import SingleInstanceGuard, read_running_instance
+from vrctool_app.state import RuntimeState
+from vrctool_app.update_manager import UpdateError, UpdateManager
 
 CTRL_CLOSE_EVENT = 2
 CTRL_LOGOFF_EVENT = 5
@@ -79,31 +83,93 @@ def valid_port(value: str) -> int:
 
 
 def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
+    raw_args = list(sys.argv[1:] if argv is None else argv)
+    aliases = {
+        "-v": "version",
+        "--version": "version",
+        "-u": "upgrade",
+        "--upgrade": "upgrade",
+        "-p": "setport",
+        "--port": "setport",
+    }
+    if not raw_args:
+        raw_args = ["start"]
+    elif raw_args[0] in aliases:
+        raw_args[0] = aliases[raw_args[0]]
+    elif raw_args[0].startswith("-") and raw_args[0] not in {"-h", "--help"}:
+        raw_args.insert(0, "start")
+
     parser = argparse.ArgumentParser(description="vrctool 网页控制台启动器")
-    parser.add_argument(
-        "command",
-        nargs="?",
-        choices=("start", "version", "uninstall"),
-        default="start",
-        help="start 启动应用，version 查看版本，uninstall 卸载应用",
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    start_parser = commands.add_parser("start", help="启动应用")
+    start_parser.add_argument("--host", default="127.0.0.1", help="网页服务监听地址")
+    start_parser.add_argument(
+        "-p",
+        "--port",
+        default=None,
+        type=valid_port,
+        help="仅本次启动使用的网页端口，不写入配置",
     )
-    parser.add_argument("-v", "--version", action="store_true", help="显示版本号")
-    parser.add_argument("--host", default="127.0.0.1", help="网页服务监听地址")
-    parser.add_argument("-p", "--port", default=8765, type=valid_port, help="网页服务端口")
-    parser.add_argument("--no-browser", action="store_true", help="启动后不自动打开浏览器")
-    parser.add_argument("--silent", action="store_true", help=argparse.SUPPRESS)
-    args = parser.parse_args(argv)
-    if args.version:
-        args.command = "version"
-    return args
+    start_parser.add_argument("--no-browser", action="store_true", help="启动后不自动打开浏览器")
+
+    commands.add_parser("version", help="显示版本号")
+    setport_parser = commands.add_parser("setport", help="设置默认网页端口，不启动应用")
+    setport_parser.add_argument("port", type=valid_port, help="下次启动使用的网页端口")
+    upgrade_parser = commands.add_parser("upgrade", help="检查并安装新版本")
+    upgrade_parser.add_argument("--check", action="store_true", help="只检查更新")
+    uninstall_parser = commands.add_parser("uninstall", help="卸载应用")
+    uninstall_parser.add_argument("--silent", action="store_true", help=argparse.SUPPRESS)
+    return parser.parse_args(raw_args)
 
 
-def main() -> int:
+def run_upgrade(check_only: bool = False) -> int:
+    manager = UpdateManager(RuntimeState())
+    snapshot = manager.check_for_updates()
+    update = snapshot.get("update", {})
+    if update.get("status") == "error":
+        print(f"检查更新失败：{update.get('error') or '未知错误'}")
+        return 1
+    current = update.get("current_version") or __version__
+    latest = update.get("latest_version") or current
+    if not update.get("available"):
+        print(f"当前已是最新版本：v{current}")
+        return 0
+    print(f"发现新版本：v{latest}")
+    if check_only:
+        print(update.get("release_url") or "")
+        return 0
+    if not manager.can_install:
+        print("自动安装仅在 Windows 安装版中可用。")
+        return 1
+    try:
+        print("正在下载安装包并校验 SHA-256...")
+        manager.download_update_blocking()
+        manager.install_update()
+    except UpdateError as exc:
+        print(f"更新失败：{exc}")
+        return 1
+    print("安装包已校验，更新程序即将启动。")
+    return 0
+
+
+def main(argv: Optional[list[str]] = None) -> int:
     global server
-    args = parse_args()
+    args = parse_args(argv)
     if args.command == "version":
         print(f"vrctool {__version__}")
         return 0
+    if args.command == "setport":
+        running = read_running_instance() or {}
+        running_port = int(running.get("port") or 0)
+        if running_port != args.port and not is_tcp_port_available("127.0.0.1", args.port):
+            print(f"端口 {args.port} 已被其他程序占用，默认网页端口未修改。")
+            return 1
+        port = set_configured_web_port(args.port)
+        print(f"默认网页端口已设置为 {port}，将在下次启动时生效。")
+        return 0
+    if args.command == "upgrade":
+        return run_upgrade(check_only=args.check)
     if args.command == "uninstall":
         try:
             uninstaller = launch_uninstaller(silent=args.silent)
@@ -113,7 +179,10 @@ def main() -> int:
         print(f"卸载程序已启动：{uninstaller}")
         return 0
 
-    url = f"http://{args.host}:{args.port}"
+    configured_port = get_configured_web_port()
+    web_port = args.port if args.port is not None else configured_port
+    temporary_port = args.port is not None
+    url = f"http://{args.host}:{web_port}"
     instance_guard = SingleInstanceGuard()
 
     if not instance_guard.acquire():
@@ -126,14 +195,23 @@ def main() -> int:
         time.sleep(3)
         return 0
 
-    instance_guard.write_instance(args.host, args.port)
+    if not is_tcp_port_available(args.host, web_port):
+        print(f"网页端口 {web_port} 已被其他程序占用，vrctool 未启动。")
+        print(f"可使用 vrctool -p <新端口> 修改默认端口，或使用 vrctool start -p <新端口> 临时启动。")
+        instance_guard.close()
+        return 1
+
+    instance_guard.write_instance(args.host, web_port)
+    os.environ["VRCTOOL_WEB_HOST"] = args.host
+    os.environ["VRCTOOL_WEB_PORT"] = str(web_port)
+    os.environ["VRCTOOL_WEB_PORT_TEMPORARY"] = "1" if temporary_port else "0"
 
     from vrctool_app.server import app as asgi_app
 
     config = uvicorn.Config(
         asgi_app,
         host=args.host,
-        port=args.port,
+        port=web_port,
         log_level="info",
         access_log=False,
     )

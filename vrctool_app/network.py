@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
+import os
 import socket
 from typing import Any, Dict, List
 
@@ -18,6 +19,18 @@ VIRTUAL_KEYWORDS = (
     "meta",
 )
 PREFERRED_KEYWORDS = ("ethernet", "以太", "wi-fi", "wifi", "wlan", "无线")
+
+
+def is_tcp_port_available(host: str, port: int) -> bool:
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    try:
+        with socket.socket(family, socket.SOCK_STREAM) as probe:
+            if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            probe.bind((host, int(port)))
+    except OSError:
+        return False
+    return True
 
 
 def _interface_score(name: str, ip: str, loopback: bool) -> tuple:

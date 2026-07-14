@@ -60,6 +60,10 @@ body {
   transition: background 240ms ease, color 240ms ease;
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 :root[data-theme="light"] body {
   background:
     linear-gradient(120deg, rgba(14, 165, 233, 0.14), transparent 30%),
@@ -351,6 +355,34 @@ h3 {
 .compact-form {
   display: grid;
   gap: 10px;
+}
+
+.settings-launcher {
+  gap: 10px;
+}
+
+.settings-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 1px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.settings-summary strong {
+  color: var(--accent);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-open-button {
+  width: 100%;
+}
+
+#settingsPortState.is-warn {
+  color: var(--warn);
 }
 
 .status-list {
@@ -1131,6 +1163,206 @@ input[type="range"] {
   width: min(360px, 100%);
   border-radius: 8px;
   padding: 18px;
+  animation: modal-enter 180ms ease-out;
+}
+
+@keyframes modal-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.release-notes-dialog {
+  width: min(620px, 100%);
+  gap: 18px;
+}
+
+.release-notes-head,
+.release-notes-heading,
+.release-notes-head-actions {
+  display: flex;
+  align-items: center;
+}
+
+.release-notes-head {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.release-notes-heading,
+.release-notes-head-actions {
+  gap: 10px;
+}
+
+.release-notes-heading > div {
+  display: grid;
+  gap: 5px;
+}
+
+.release-notes-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 8px;
+  color: var(--ink);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+}
+
+.release-notes-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.release-notes-list {
+  counter-reset: release-item;
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.release-notes-list li {
+  counter-increment: release-item;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 13px 2px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.release-notes-list li:first-child {
+  border-top: 1px solid var(--line);
+}
+
+.release-notes-list li::before {
+  content: counter(release-item, decimal-leading-zero);
+  color: var(--accent);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  padding-top: 3px;
+}
+
+.release-notes-choice {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 2px;
+}
+
+.release-notes-choice > span {
+  display: grid;
+  gap: 2px;
+}
+
+.release-notes-choice strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.release-notes-choice small {
+  color: var(--subtle);
+  font-size: 12px;
+}
+
+.release-notes-dialog > .primary {
+  width: 100%;
+}
+
+.settings-dialog {
+  width: min(640px, 100%);
+  max-height: min(760px, calc(100vh - 40px));
+  overflow: auto;
+}
+
+.settings-modal-head {
+  align-items: center;
+}
+
+.settings-modal-head > div:first-child {
+  display: grid;
+  gap: 5px;
+}
+
+.settings-head-actions,
+.modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-port-status {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  border-block: 1px solid var(--line);
+  padding: 14px 2px;
+}
+
+.settings-port-status > div {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-port-status span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.settings-port-status strong {
+  color: var(--text);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+#settingsForm {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.settings-grid label:first-child {
+  grid-column: 1 / -1;
+}
+
+.settings-feedback {
+  min-height: 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.modal-actions {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.modal-actions button {
+  white-space: nowrap;
+}
+
+.modal-actions .ghost {
+  min-width: 78px;
+}
+
+.modal-actions .primary {
+  flex: 1;
+  width: auto;
 }
 
 .qr-box {
@@ -1200,6 +1432,29 @@ input[type="range"] {
   .custom-osc-form,
   .ring-grid {
     grid-template-columns: 1fr;
+  }
+
+  .settings-grid,
+  .settings-port-status {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-grid label:first-child {
+    grid-column: auto;
+  }
+
+  .settings-modal-head {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .release-notes-head {
+    align-items: flex-start;
+  }
+
+  .release-notes-head-actions {
+    align-items: flex-end;
+    flex-direction: column-reverse;
   }
 
   .batch-sequence {

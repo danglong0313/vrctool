@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 from uuid import uuid4
 from pathlib import Path
@@ -9,17 +10,18 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from vrctool_app.chatbox import ChatboxManager
-from vrctool_app.config_store import load_config, save_config
+from vrctool_app.config_store import get_configured_web_port, load_config, save_config
 from vrctool_app.device_info import get_device_info
 from vrctool_app.dglab import DGLabManager
 from vrctool_app.heartrate import HeartRateManager
 from vrctool_app.lifecycle import request_shutdown
-from vrctool_app.network import get_network_interfaces, pick_default_lan_ip
+from vrctool_app.network import get_network_interfaces, is_tcp_port_available, pick_default_lan_ip
 from vrctool_app.osc import VRChatOSCManager
 from vrctool_app.performance import PerformanceManager
+from vrctool_app.release_notes import current_release_notes, should_show_release_notes
 from vrctool_app.state import RuntimeState
 from vrctool_app.update_manager import UpdateError, UpdateManager
 
@@ -34,6 +36,31 @@ state = RuntimeState()
 config = load_config()
 for config_section in ("chatbox", "dglab", "heart_rate", "performance", "osc"):
     state.patch(config_section, **config.get(config_section, {}))
+configured_web_port = get_configured_web_port(config)
+try:
+    effective_web_port = int(os.environ.get("VRCTOOL_WEB_PORT", configured_web_port))
+except ValueError:
+    effective_web_port = configured_web_port
+effective_web_host = os.environ.get("VRCTOOL_WEB_HOST", "127.0.0.1")
+temporary_web_port = os.environ.get("VRCTOOL_WEB_PORT_TEMPORARY") == "1"
+release_notes = current_release_notes()
+dismissed_release_notes_version = str(
+    config.get("app", {}).get("dismissed_release_notes_version", "")
+)
+state.patch(
+    "app",
+    web_host=effective_web_host,
+    web_port=effective_web_port,
+    configured_web_port=configured_web_port,
+    port_temporary=temporary_web_port,
+    restart_required=effective_web_port != configured_web_port,
+    release_notes=release_notes,
+    show_release_notes=should_show_release_notes(
+        str(release_notes.get("version") or ""),
+        dismissed_release_notes_version,
+    ),
+    dismissed_release_notes_version=dismissed_release_notes_version,
+)
 updates = UpdateManager(state)
 chatbox = ChatboxManager(state)
 heart_rate = HeartRateManager(
@@ -66,6 +93,18 @@ def update_config(section: str, **values) -> None:
 class ChatboxConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 9000
+
+
+class BasicSettingsPayload(BaseModel):
+    web_port: int = Field(default=8765, ge=1, le=65535)
+    chatbox_host: str = "127.0.0.1"
+    chatbox_port: int = Field(default=9000, ge=1, le=65535)
+    device_interval: float = Field(default=3.0, ge=1.0, le=3600.0)
+    afk_interval: float = Field(default=3.0, ge=1.0, le=3600.0)
+
+
+class ReleaseNotesPreferencePayload(BaseModel):
+    dismissed: bool = True
 
 
 class ChatboxBatchPayload(BaseModel):
@@ -246,6 +285,68 @@ async def shutdown_app():
     ok = request_shutdown()
     state.log("warn", "正在关闭后端服务" if ok else "当前启动方式不支持网页关闭")
     return {"ok": ok}
+
+
+@app.post("/api/app/settings")
+async def configure_basic_settings(payload: BasicSettingsPayload):
+    chatbox_host = payload.chatbox_host.strip() or "127.0.0.1"
+    app_snapshot = state.snapshot()["app"]
+    current_port = int(app_snapshot["web_port"])
+    web_host = str(app_snapshot.get("web_host") or "127.0.0.1")
+    if int(payload.web_port) != current_port and not is_tcp_port_available(
+        web_host,
+        int(payload.web_port),
+    ):
+        raise HTTPException(status_code=409, detail=f"网页端口 {payload.web_port} 已被占用")
+    chatbox.configure(chatbox_host, payload.chatbox_port)
+    state.patch(
+        "chatbox",
+        device_interval=float(payload.device_interval),
+        afk_interval=float(payload.afk_interval),
+    )
+    config.setdefault("app", {})["web_port"] = int(payload.web_port)
+    config.setdefault("chatbox", {}).update(
+        host=chatbox_host,
+        port=int(payload.chatbox_port),
+        device_interval=float(payload.device_interval),
+        afk_interval=float(payload.afk_interval),
+    )
+    save_config(config)
+    state.patch(
+        "app",
+        configured_web_port=int(payload.web_port),
+        port_temporary=bool(app_snapshot.get("port_temporary"))
+        and current_port != int(payload.web_port),
+        restart_required=current_port != int(payload.web_port),
+    )
+    state.log(
+        "ok",
+        "基础设置已保存，网页端口将在下次启动时生效"
+        if current_port != int(payload.web_port)
+        else "基础设置已保存",
+    )
+    return state.snapshot()
+
+
+@app.post("/api/app/release-notes")
+async def configure_release_notes_preference(payload: ReleaseNotesPreferencePayload):
+    app_snapshot = state.snapshot()["app"]
+    notes_version = str(app_snapshot.get("release_notes", {}).get("version") or "")
+    dismissed_version = notes_version if payload.dismissed else ""
+    config.setdefault("app", {})["dismissed_release_notes_version"] = dismissed_version
+    save_config(config)
+    state.patch(
+        "app",
+        dismissed_release_notes_version=dismissed_version,
+        show_release_notes=not payload.dismissed,
+    )
+    state.log(
+        "ok",
+        f"v{notes_version} 更新内容提醒已关闭"
+        if payload.dismissed
+        else "更新内容提醒已恢复",
+    )
+    return state.snapshot()
 
 
 @app.get("/api/update/check")

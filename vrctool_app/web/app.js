@@ -3,6 +3,10 @@ const $ = (id) => document.getElementById(id);
 let currentState = null;
 let pulseEnabled = true;
 let qrModalOpen = false;
+let settingsModalOpen = false;
+let releaseNotesModalOpen = false;
+let releaseNotesHandledThisSession = false;
+let releaseNotesClosing = false;
 let performanceGrantPending = false;
 const debounceTimers = new Map();
 const batchSourceLabels = {
@@ -71,10 +75,18 @@ function portInputValue(id) {
   return value;
 }
 
+function syncModalLock() {
+  document.body.classList.toggle(
+    "modal-open",
+    qrModalOpen || settingsModalOpen || releaseNotesModalOpen,
+  );
+}
+
 function openQrModal() {
   qrModalOpen = true;
   $("qrModal").classList.add("is-open");
   $("qrModal").setAttribute("aria-hidden", "false");
+  syncModalLock();
   if (window.lucide) window.lucide.createIcons();
 }
 
@@ -82,6 +94,74 @@ function closeQrModal() {
   qrModalOpen = false;
   $("qrModal").classList.remove("is-open");
   $("qrModal").setAttribute("aria-hidden", "true");
+  syncModalLock();
+}
+
+function openSettingsModal() {
+  settingsModalOpen = true;
+  $("settingsFeedback").textContent = "";
+  if (currentState) render(currentState);
+  $("settingsModal").classList.add("is-open");
+  $("settingsModal").setAttribute("aria-hidden", "false");
+  syncModalLock();
+  window.setTimeout(() => $("webPort").focus(), 40);
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function closeSettingsModal() {
+  settingsModalOpen = false;
+  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  $("settingsModal").classList.remove("is-open");
+  $("settingsModal").setAttribute("aria-hidden", "true");
+  syncModalLock();
+  if (currentState) render(currentState);
+}
+
+function renderReleaseNotes(appState) {
+  const notes = appState?.release_notes || {};
+  const version = notes.version || appState?.version || "";
+  $("releaseNotesTitle").textContent = notes.title || "本次更新";
+  $("releaseNotesVersion").textContent = version ? `v${version}` : "更新";
+  const list = $("releaseNotesList");
+  list.replaceChildren();
+  (Array.isArray(notes.items) ? notes.items : []).forEach((item) => {
+    const row = document.createElement("li");
+    row.textContent = String(item);
+    list.appendChild(row);
+  });
+}
+
+function maybeOpenReleaseNotes() {
+  if (releaseNotesHandledThisSession || !currentState?.app?.show_release_notes) return;
+  releaseNotesHandledThisSession = true;
+  releaseNotesModalOpen = true;
+  $("dismissReleaseNotes").checked = false;
+  $("releaseNotesFeedback").textContent = "";
+  renderReleaseNotes(currentState.app);
+  $("releaseNotesModal").classList.add("is-open");
+  $("releaseNotesModal").setAttribute("aria-hidden", "false");
+  syncModalLock();
+  if (window.lucide) window.lucide.createIcons();
+}
+
+async function closeReleaseNotesModal() {
+  if (!releaseNotesModalOpen || releaseNotesClosing) return;
+  releaseNotesClosing = true;
+  const dismissPermanently = $("dismissReleaseNotes").checked;
+  try {
+    if (dismissPermanently) {
+      $("releaseNotesFeedback").textContent = "正在保存提醒设置…";
+      await api("/api/app/release-notes", { dismissed: true });
+    }
+    releaseNotesModalOpen = false;
+    $("releaseNotesModal").classList.remove("is-open");
+    $("releaseNotesModal").setAttribute("aria-hidden", "true");
+    syncModalLock();
+  } catch (error) {
+    $("releaseNotesFeedback").textContent = error.message || String(error);
+  } finally {
+    releaseNotesClosing = false;
+  }
 }
 
 function setTheme(theme) {
@@ -427,6 +507,7 @@ function render(state) {
   if (!state) return;
   currentState = state;
   const { chatbox, device, afk, dglab, osc, logs } = state;
+  const appState = state.app || {};
   const heartRate = state.heart_rate || {};
   const performance = state.performance || {};
   const update = state.update || {};
@@ -434,6 +515,20 @@ function render(state) {
   setPill($("oscState"), osc.running, "OSC 运行", "OSC 停止");
   setPill($("dglabState"), dglab.running, "DG-LAB 组件运行", "DG-LAB 组件停止");
   setPill($("bindState"), dglab.bound, "已连接", "未连接");
+
+  const currentWebPort = appState.web_port || 8765;
+  const configuredWebPort = appState.configured_web_port || currentWebPort;
+  setValueUnlessFocused("webPort", configuredWebPort);
+  $("webPortSummary").textContent = configuredWebPort;
+  $("currentWebPort").textContent = currentWebPort;
+  $("configuredWebPort").textContent = configuredWebPort;
+  $("settingsPortState").textContent = appState.port_temporary
+    ? "本次临时"
+    : appState.restart_required
+      ? "等待重启"
+      : "配置端口";
+  $("settingsPortState").classList.toggle("is-warn", Boolean(appState.restart_required));
+  renderReleaseNotes(appState);
 
   setValueUnlessFocused("chatHost", chatbox.host);
   setValueUnlessFocused("chatPort", chatbox.port);
@@ -557,41 +652,11 @@ async function loadNetwork() {
 }
 
 function bindEvents() {
-  const syncChatboxConfig = () =>
-    postDebounced("chatbox-config", "/api/chatbox/config", () => {
-      const port = portInputValue("chatPort");
-      if (!port) return null;
-      return {
-        host: $("chatHost").value.trim() || "127.0.0.1",
-        port,
-      };
-    });
-
-  const syncDeviceInterval = () =>
-    postDebounced("device-interval", "/api/chatbox/device", () => {
-      const interval = numericInputValue("deviceInterval");
-      if (!interval) return null;
-      return {
-        enabled: Boolean(currentState?.chatbox?.device_enabled),
-        interval,
-      };
-    });
-
   const syncBatchSettings = () =>
     postDebounced("chatbox-batch", "/api/chatbox/batch", () => ({
       enabled: Boolean(currentState?.chatbox?.batch_enabled),
       interval: numericInputValue("batchInterval") || 3,
     }));
-
-  const syncAfkInterval = () =>
-    postDebounced("afk-interval", "/api/chatbox/afk", () => {
-      const interval = numericInputValue("afkInterval");
-      if (!interval) return null;
-      return {
-        enabled: Boolean(currentState?.chatbox?.afk_enabled),
-        interval,
-      };
-    });
 
   const syncHeartRateInterval = () =>
     postDebounced("heart-rate-interval", "/api/heartrate/chatbox", () => {
@@ -662,10 +727,46 @@ function bindEvents() {
     setTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light"),
   );
 
-  $("chatHost").addEventListener("input", syncChatboxConfig);
-  $("chatPort").addEventListener("input", syncChatboxConfig);
-  $("deviceInterval").addEventListener("input", syncDeviceInterval);
-  $("afkInterval").addEventListener("input", syncAfkInterval);
+  $("openSettings").addEventListener("click", openSettingsModal);
+  $("closeSettingsModal").addEventListener("click", closeSettingsModal);
+  $("dismissSettingsModal").addEventListener("click", closeSettingsModal);
+  $("cancelSettings").addEventListener("click", closeSettingsModal);
+  $("settingsForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const webPort = portInputValue("webPort");
+    const chatboxPort = portInputValue("chatPort");
+    const deviceInterval = numericInputValue("deviceInterval");
+    const afkInterval = numericInputValue("afkInterval");
+    if (!webPort || !chatboxPort || !deviceInterval || !afkInterval) {
+      $("settingsFeedback").textContent = "请检查端口和发送间隔。";
+      return;
+    }
+    const button = $("saveSettings");
+    button.disabled = true;
+    $("settingsFeedback").textContent = "正在保存…";
+    try {
+      const state = await api("/api/app/settings", {
+        web_port: webPort,
+        chatbox_host: $("chatHost").value.trim() || "127.0.0.1",
+        chatbox_port: chatboxPort,
+        device_interval: deviceInterval,
+        afk_interval: afkInterval,
+      });
+      $("settingsFeedback").textContent = state.app?.restart_required
+        ? "已保存，网页端口将在下次启动时切换。"
+        : "设置已保存。";
+      window.setTimeout(closeSettingsModal, 520);
+    } catch (error) {
+      $("settingsFeedback").textContent = error.message || String(error);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $("closeReleaseNotesModal").addEventListener("click", closeReleaseNotesModal);
+  $("dismissReleaseNotesModal").addEventListener("click", closeReleaseNotesModal);
+  $("acknowledgeReleaseNotes").addEventListener("click", closeReleaseNotesModal);
+
   $("heartInterval").addEventListener("input", syncHeartRateInterval);
   $("batchInterval").addEventListener("input", syncBatchSettings);
   $("batchEnabled").addEventListener("click", () =>
@@ -839,8 +940,10 @@ function bindEvents() {
   $("closeQrModal").addEventListener("click", closeQrModal);
   $("dismissQrModal").addEventListener("click", closeQrModal);
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && qrModalOpen) {
-      closeQrModal();
+    if (event.key === "Escape") {
+      if (releaseNotesModalOpen) closeReleaseNotesModal();
+      else if (settingsModalOpen) closeSettingsModal();
+      else if (qrModalOpen) closeQrModal();
     }
   });
 
@@ -949,6 +1052,7 @@ async function boot() {
   switchSection(location.hash.slice(1) || "overview", false);
   await loadNetwork();
   await api("/api/status");
+  maybeOpenReleaseNotes();
   connectStatusSocket();
 }
 

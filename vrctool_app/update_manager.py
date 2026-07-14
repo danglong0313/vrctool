@@ -175,6 +175,19 @@ class UpdateManager:
             self._download_thread.start()
             return self.state.snapshot()
 
+    def download_update_blocking(self) -> Dict[str, Any]:
+        self.start_download()
+        thread = self._download_thread
+        if thread is not None:
+            thread.join()
+        snapshot = self.state.snapshot()
+        update = snapshot.get("update", {})
+        if update.get("status") == "error":
+            raise UpdateError(str(update.get("error") or "下载更新失败"))
+        if update.get("status") != "ready":
+            raise UpdateError("安装包尚未下载完成")
+        return snapshot
+
     def install_update(self) -> Dict[str, Any]:
         with self._operation_lock:
             update = self.state.snapshot().get("update", {})

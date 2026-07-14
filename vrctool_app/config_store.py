@@ -8,7 +8,14 @@ from pathlib import Path
 from typing import Any, Dict
 
 
+DEFAULT_WEB_PORT = 8765
+
+
 DEFAULT_CONFIG: Dict[str, Any] = {
+    "app": {
+        "web_port": DEFAULT_WEB_PORT,
+        "dismissed_release_notes_version": "",
+    },
     "chatbox": {
         "host": "127.0.0.1",
         "port": 9000,
@@ -118,3 +125,22 @@ def save_config(config: Dict[str, Any]) -> None:
         json.dumps(config, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+
+
+def get_configured_web_port(config: Dict[str, Any] | None = None) -> int:
+    source = config if config is not None else load_config()
+    try:
+        port = int(source.get("app", {}).get("web_port", DEFAULT_WEB_PORT))
+    except (AttributeError, TypeError, ValueError):
+        return DEFAULT_WEB_PORT
+    return port if 1 <= port <= 65535 else DEFAULT_WEB_PORT
+
+
+def set_configured_web_port(port: int) -> int:
+    port = int(port)
+    if not 1 <= port <= 65535:
+        raise ValueError("端口号必须在 1 到 65535 之间")
+    config = load_config()
+    config.setdefault("app", {})["web_port"] = port
+    save_config(config)
+    return port

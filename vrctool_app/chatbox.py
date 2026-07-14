@@ -32,7 +32,7 @@ BATCH_SOURCE_LABELS = {
 class ChatboxManager:
     def __init__(self, state: RuntimeState) -> None:
         self.state = state
-        self._client = SimpleUDPClient("127.0.0.1", 9000)
+        self._client: Optional[SimpleUDPClient] = SimpleUDPClient("127.0.0.1", 9000)
         self._device_task: Optional[asyncio.Task] = None
         self._afk_task: Optional[asyncio.Task] = None
         self._custom_task: Optional[asyncio.Task] = None
@@ -44,8 +44,18 @@ class ChatboxManager:
         self._afk_started = datetime.now()
 
     def configure(self, host: str = "127.0.0.1", port: int = 9000) -> None:
-        self._client = SimpleUDPClient(host, port)
+        next_client = SimpleUDPClient(host, port)
+        previous_client = self._client
+        self._client = next_client
+        self._close_client(previous_client)
         self.state.patch("chatbox", host=host, port=port)
+
+    @staticmethod
+    def _close_client(client: Optional[SimpleUDPClient]) -> None:
+        sock = getattr(client, "_sock", None)
+        close = getattr(sock, "close", None)
+        if callable(close):
+            close()
 
     async def start(self) -> None:
         self.refresh_batch_state()
@@ -72,6 +82,8 @@ class ChatboxManager:
         return True
 
     def _send_now(self, message: str, source: str) -> None:
+        if self._client is None:
+            return
         self._client.send_message("/chatbox/input", [message, True, False])
         self.state.patch(
             "chatbox",
@@ -267,6 +279,10 @@ class ChatboxManager:
             info = get_device_info()
             self.state.patch("device", **info)
             self.send_message(format_device_message(info), source="device")
+            interval = max(
+                1.0,
+                float(self.state.snapshot()["chatbox"].get("device_interval") or interval),
+            )
             await asyncio.sleep(interval)
 
     async def start_afk(self, interval: float = 3.0) -> None:
@@ -312,6 +328,10 @@ class ChatboxManager:
                 f"时长: {hours:02d}小时{minutes:02d}分{seconds:02d}秒"
             )
             self.send_message(message, source="afk")
+            interval = max(
+                1.0,
+                float(self.state.snapshot()["chatbox"].get("afk_interval") or interval),
+            )
             await asyncio.sleep(interval)
 
     async def start_dglab_status(self, interval: float = 1.0) -> None:
@@ -341,6 +361,9 @@ class ChatboxManager:
         await self.stop_custom_message()
         await self.stop_dglab_status()
         await self._stop_batch_task()
+        client = self._client
+        self._client = None
+        self._close_client(client)
 
 
 def format_dglab_message(snapshot: dict) -> str:

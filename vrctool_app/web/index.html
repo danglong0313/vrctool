@@ -4,10 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>vrctool</title>
+    <link rel="icon" type="image/png" href="/logo.png?v=20260714-favicon-1" />
     <meta http-equiv="Cache-Control" content="no-store" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260713-chatbox-batch-1" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260714-release-notes-1" />
     <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-    <script defer src="/static/app.js?v=20260713-chatbox-batch-1"></script>
+    <script defer src="/static/app.js?v=20260714-release-notes-1"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -66,7 +67,7 @@
         <section class="side-card update-card" id="updateCard" aria-labelledby="updateCardTitle">
           <div class="side-card-head">
             <span id="updateCardTitle">应用更新</span>
-            <span class="version-badge" id="currentVersion">v2.3.1</span>
+            <span class="version-badge" id="currentVersion">v2.3.2</span>
           </div>
           <div class="update-summary">
             <strong id="updateTitle">等待检查</strong>
@@ -96,31 +97,19 @@
           </div>
         </section>
 
-        <section class="side-card">
+        <section class="side-card settings-launcher">
           <div class="side-card-head">
             <span>基础设置</span>
-            <button class="icon-button ghost" id="refreshDevice" title="刷新设备信息">
-              <i data-lucide="refresh-cw"></i>
-            </button>
+            <span class="mini" id="settingsPortState">配置端口</span>
           </div>
-          <div class="compact-form">
-            <label>
-              <span>ChatBox 地址</span>
-              <input id="chatHost" value="127.0.0.1" />
-            </label>
-            <label>
-              <span>ChatBox 端口</span>
-              <input id="chatPort" type="number" value="9000" />
-            </label>
-            <label>
-              <span>设备间隔</span>
-              <input id="deviceInterval" type="number" min="1" step="1" value="3" />
-            </label>
-            <label>
-              <span>挂机间隔</span>
-              <input id="afkInterval" type="number" min="1" step="1" value="3" />
-            </label>
+          <div class="settings-summary">
+            <span>网页端口</span>
+            <strong id="webPortSummary">8765</strong>
           </div>
+          <button class="settings-open-button" id="openSettings" type="button">
+            <i data-lucide="settings-2"></i>
+            打开设置
+          </button>
         </section>
 
         <button class="shutdown-button" id="shutdownApp" title="关闭后端服务">
@@ -633,6 +622,118 @@
           </section>
         </section>
       </main>
+    </div>
+
+    <div class="modal" id="releaseNotesModal" aria-hidden="true">
+      <button class="modal-backdrop" id="closeReleaseNotesModal" aria-label="关闭更新内容"></button>
+      <div
+        class="modal-dialog release-notes-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="releaseNotesTitle"
+      >
+        <div class="release-notes-head">
+          <div class="release-notes-heading">
+            <span class="release-notes-icon" aria-hidden="true">
+              <i data-lucide="sparkles"></i>
+            </span>
+            <div>
+              <p class="eyebrow">What's New</p>
+              <h3 id="releaseNotesTitle">本次更新</h3>
+            </div>
+          </div>
+          <div class="release-notes-head-actions">
+            <span class="version-badge" id="releaseNotesVersion">v2.3.2</span>
+            <button class="icon-button ghost" id="dismissReleaseNotesModal" type="button" title="关闭">
+              <i data-lucide="x"></i>
+            </button>
+          </div>
+        </div>
+
+        <ol class="release-notes-list" id="releaseNotesList"></ol>
+
+        <label class="checkbox-row release-notes-choice">
+          <input id="dismissReleaseNotes" type="checkbox" />
+          <span>
+            <strong>不再提醒</strong>
+            <small>下一个版本会自动恢复</small>
+          </span>
+        </label>
+        <div class="settings-feedback" id="releaseNotesFeedback" role="status"></div>
+        <button class="primary" id="acknowledgeReleaseNotes" type="button">
+          <i data-lucide="check"></i>
+          知道了
+        </button>
+      </div>
+    </div>
+
+    <div class="modal" id="settingsModal" aria-hidden="true">
+      <button class="modal-backdrop" id="closeSettingsModal" aria-label="关闭基础设置"></button>
+      <div
+        class="modal-dialog settings-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settingsModalTitle"
+      >
+        <div class="panel-head settings-modal-head">
+          <div>
+            <p class="eyebrow">Application Preferences</p>
+            <h3 id="settingsModalTitle">基础设置</h3>
+          </div>
+          <div class="settings-head-actions">
+            <button class="icon-button ghost" id="refreshDevice" type="button" title="刷新设备信息">
+              <i data-lucide="refresh-cw"></i>
+            </button>
+            <button class="icon-button ghost" id="dismissSettingsModal" type="button" title="关闭">
+              <i data-lucide="x"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="settings-port-status">
+          <div>
+            <span>当前运行端口</span>
+            <strong id="currentWebPort">8765</strong>
+          </div>
+          <div>
+            <span>下次启动端口</span>
+            <strong id="configuredWebPort">8765</strong>
+          </div>
+        </div>
+
+        <form id="settingsForm">
+          <div class="settings-grid">
+            <label>
+              <span>网页端口</span>
+              <input id="webPort" type="number" min="1" max="65535" value="8765" required />
+            </label>
+            <label>
+              <span>ChatBox 地址</span>
+              <input id="chatHost" value="127.0.0.1" required />
+            </label>
+            <label>
+              <span>ChatBox 端口</span>
+              <input id="chatPort" type="number" min="1" max="65535" value="9000" required />
+            </label>
+            <label>
+              <span>设备间隔（秒）</span>
+              <input id="deviceInterval" type="number" min="1" max="3600" step="1" value="3" required />
+            </label>
+            <label>
+              <span>挂机间隔（秒）</span>
+              <input id="afkInterval" type="number" min="1" max="3600" step="1" value="3" required />
+            </label>
+          </div>
+          <div class="settings-feedback" id="settingsFeedback" role="status"></div>
+          <div class="modal-actions">
+            <button class="ghost" id="cancelSettings" type="button">取消</button>
+            <button class="primary" id="saveSettings" type="submit">
+              <i data-lucide="save"></i>
+              保存设置
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
 
     <div class="modal" id="qrModal" aria-hidden="true">

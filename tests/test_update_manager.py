@@ -28,19 +28,19 @@ class StubUpdateManager(UpdateManager):
 class UpdateManagerTests(unittest.TestCase):
     def test_extract_version_supports_old_and_new_tag_formats(self) -> None:
         self.assertEqual(str(extract_version("vrctool_v2.1")), "2.1")
-        self.assertEqual(str(extract_version("v2.3.1")), "2.3.1")
+        self.assertEqual(str(extract_version("v2.3.2")), "2.3.2")
 
     def test_select_installer_asset_prefers_vrctool_setup(self) -> None:
         selected = select_installer_asset(
             {
                 "assets": [
                     {"name": "helper-setup.exe"},
-                    {"name": "release-notes-2.3.1.txt"},
-                    {"name": "vrctool-setup-2.3.1.exe"},
+                    {"name": "release-notes-2.3.2.txt"},
+                    {"name": "vrctool-setup-2.3.2.exe"},
                 ]
             }
         )
-        self.assertEqual(selected["name"], "vrctool-setup-2.3.1.exe")
+        self.assertEqual(selected["name"], "vrctool-setup-2.3.2.exe")
 
     def test_normalize_sha256_requires_a_complete_digest(self) -> None:
         digest = "a" * 64
@@ -114,6 +114,22 @@ class UpdateManagerTests(unittest.TestCase):
         self.assertIn("Start-Sleep -Milliseconds 1500", script)
         self.assertIn("/VERYSILENT", script)
         self.assertEqual(result["update"]["status"], "installing")
+
+    def test_blocking_download_waits_until_installer_is_ready(self) -> None:
+        state = RuntimeState()
+        manager = UpdateManager(state)
+        thread = unittest.mock.MagicMock()
+
+        def mark_ready():
+            state.patch("update", status="ready")
+            return state.snapshot()
+
+        manager._download_thread = thread
+        with patch.object(manager, "start_download", side_effect=mark_ready):
+            result = manager.download_update_blocking()
+
+        thread.join.assert_called_once_with()
+        self.assertEqual(result["update"]["status"], "ready")
 
 
 if __name__ == "__main__":
