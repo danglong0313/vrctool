@@ -6,9 +6,9 @@
     <title>vrctool</title>
     <link rel="icon" type="image/png" href="/logo.png?v=20260714-favicon-1" />
     <meta http-equiv="Cache-Control" content="no-store" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260715-weather-1" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260715-city-fix-1" />
     <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-    <script defer src="/static/app.js?v=20260715-weather-1"></script>
+    <script defer src="/static/app.js?v=20260715-city-fix-1"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -71,7 +71,7 @@
         <section class="side-card update-card" id="updateCard" aria-labelledby="updateCardTitle">
           <div class="side-card-head">
             <span id="updateCardTitle">应用更新</span>
-            <span class="version-badge" id="currentVersion">v2.4.0</span>
+            <span class="version-badge" id="currentVersion">v2.4.1</span>
           </div>
           <div class="update-summary">
             <strong id="updateTitle">等待检查</strong>
@@ -429,14 +429,14 @@
                 </div>
                 <div class="weather-temperature">
                   <strong id="weatherTemperature">--</strong><span>°C</span>
-                  <small id="weatherCondition">暂无天气数据</small>
+                  <small id="weatherCondition"></small>
                 </div>
               </div>
               <div class="weather-location">
                 <i data-lucide="map-pin"></i>
                 <div>
-                  <strong id="weatherLocation">尚未定位</strong>
-                  <small id="weatherLocationSource">打开本页后自动获取位置</small>
+                  <strong id="weatherLocation"></strong>
+                  <small id="weatherLocationSource"></small>
                 </div>
               </div>
               <div class="weather-metrics">
@@ -493,6 +493,12 @@
               <p class="mini weather-broadcast-preview" id="weatherPreview">
                 定位成功后将发送地点、天气、温度、湿度、风速和降水。
               </p>
+              <a
+                class="mini weather-attribution"
+                href="https://www.openstreetmap.org/copyright"
+                target="_blank"
+                rel="noopener noreferrer"
+              >城市数据 © OpenStreetMap contributors</a>
               <button class="primary" id="saveWeatherSettings" type="button">
                 <i data-lucide="save"></i>
                 应用设置
@@ -732,7 +738,7 @@
             </div>
           </div>
           <div class="release-notes-head-actions">
-            <span class="version-badge" id="releaseNotesVersion">v2.4.0</span>
+            <span class="version-badge" id="releaseNotesVersion">v2.4.1</span>
             <button class="icon-button ghost" id="dismissReleaseNotesModal" type="button" title="关闭">
               <i data-lucide="x"></i>
             </button>

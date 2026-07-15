@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, urlparse
 from vrctool_app.state import RuntimeState
 from vrctool_app.weather import (
     MIN_WEATHER_INTERVAL,
+    WeatherError,
     WeatherManager,
     format_weather_message,
     weather_code_label,
@@ -37,6 +38,8 @@ def fake_weather_request(url: str) -> dict:
                 }
             ]
         }
+    if url.startswith("https://nominatim.openstreetmap.org/reverse"):
+        return {"address": {"city": "上海"}}
     if url.startswith("https://api.open-meteo.com/"):
         return {
             "timezone": "Asia/Shanghai",
@@ -74,6 +77,19 @@ class WeatherFormattingTests(unittest.TestCase):
         self.assertIn("当前降水 0.3 mm", message)
         self.assertLessEqual(len(message), 240)
 
+    def test_ready_weather_without_a_city_is_not_sent(self) -> None:
+        self.assertEqual(
+            format_weather_message(
+                {
+                    "ready": True,
+                    "location_name": "",
+                    "condition": "晴",
+                    "temperature": 25,
+                }
+            ),
+            "",
+        )
+
 
 class WeatherManagerTests(unittest.IsolatedAsyncioTestCase):
     def create_manager(self):
@@ -95,9 +111,74 @@ class WeatherManagerTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(success)
         self.assertTrue(weather["ready"])
         self.assertEqual(weather["location_source"], "ip")
-        self.assertEqual(weather["location_name"], "上海 · 上海市")
+        self.assertEqual(weather["location_name"], "上海")
         self.assertEqual(weather["condition"], "小雨")
         self.assertEqual(weather["temperature"], 28.4)
+
+    async def test_browser_location_requires_and_keeps_resolved_city(self) -> None:
+        state, manager, _sent = self.create_manager()
+
+        success = await manager.use_browser_location(
+            31.2304,
+            121.4737,
+            25.0,
+        )
+        weather = state.snapshot()["weather"]
+
+        self.assertTrue(success)
+        self.assertEqual(weather["location_name"], "上海")
+        self.assertEqual(weather["location_source"], "browser")
+        self.assertEqual(weather["location_accuracy"], 25.0)
+        self.assertTrue(weather["ready"])
+
+    async def test_browser_location_rejects_placeholder_and_clears_values(self) -> None:
+        state = RuntimeState()
+
+        def placeholder_city_request(url: str) -> dict:
+            if url.startswith("https://nominatim.openstreetmap.org/reverse"):
+                return {"address": {"city": "当前位置"}}
+            return fake_weather_request(url)
+
+        manager = WeatherManager(
+            state,
+            lambda _message: None,
+            json_request=placeholder_city_request,
+        )
+        state.patch(
+            "weather",
+            ready=True,
+            location_name="旧城市",
+            temperature=20.0,
+            last_message="旧天气",
+        )
+
+        success = await manager.use_browser_location(31.2, 121.4, 20.0)
+        weather = state.snapshot()["weather"]
+
+        self.assertFalse(success)
+        self.assertEqual(weather["location_name"], "")
+        self.assertIsNone(weather["temperature"])
+        self.assertEqual(weather["last_message"], "")
+        self.assertFalse(weather["ready"])
+
+    async def test_ip_location_without_city_clears_all_values(self) -> None:
+        state = RuntimeState()
+
+        def request_without_city(url: str) -> dict:
+            if url == "https://ipapi.co/json/":
+                return {"latitude": 31.2304, "longitude": 121.4737, "city": ""}
+            return fake_weather_request(url)
+
+        manager = WeatherManager(state, lambda _message: None, json_request=request_without_city)
+        state.patch("weather", ready=True, location_name="旧城市", temperature=20.0)
+
+        success = await manager.refresh(auto_locate=True)
+        weather = state.snapshot()["weather"]
+
+        self.assertFalse(success)
+        self.assertEqual(weather["location_name"], "")
+        self.assertIsNone(weather["temperature"])
+        self.assertFalse(weather["ready"])
 
     async def test_manual_city_search_replaces_location(self) -> None:
         state, manager, _sent = self.create_manager()
@@ -107,8 +188,20 @@ class WeatherManagerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(success)
         self.assertEqual(weather["location_source"], "manual")
-        self.assertEqual(weather["location_name"], "杭州 · 浙江")
+        self.assertEqual(weather["location_name"], "杭州")
         self.assertAlmostEqual(weather["latitude"], 30.2741)
+
+    async def test_missing_manual_city_clears_previous_weather(self) -> None:
+        state, manager, _sent = self.create_manager()
+        state.patch("weather", ready=True, location_name="旧城市", temperature=20.0)
+
+        with self.assertRaises(WeatherError):
+            await manager.search_city("不存在的城市")
+        weather = state.snapshot()["weather"]
+
+        self.assertEqual(weather["location_name"], "")
+        self.assertIsNone(weather["temperature"])
+        self.assertFalse(weather["ready"])
 
     async def test_broadcast_sends_immediately_clamps_interval_and_cleans_task(self) -> None:
         state, manager, sent = self.create_manager()

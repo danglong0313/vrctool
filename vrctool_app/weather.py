@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from datetime import datetime
 from typing import Any, Callable, Optional
 from urllib.error import HTTPError, URLError
@@ -18,6 +19,10 @@ MAX_WEATHER_INTERVAL = 3600.0
 IP_LOCATION_URL = "https://ipapi.co/json/"
 WEATHER_URL = "https://api.open-meteo.com/v1/forecast"
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
+REVERSE_GEOCODING_URL = os.environ.get(
+    "VRCTOOL_REVERSE_GEOCODING_URL",
+    "https://nominatim.openstreetmap.org/reverse",
+)
 USER_AGENT = f"vrctool/{__version__} (+https://github.com/danglong0313/vrctool)"
 
 WEATHER_CODE_LABELS = {
@@ -61,9 +66,9 @@ def weather_code_label(code: int) -> str:
 
 
 def format_weather_message(weather: dict[str, Any]) -> str:
-    if not weather.get("ready"):
+    location = str(weather.get("location_name") or "").strip()
+    if not weather.get("ready") or not location:
         return ""
-    location = str(weather.get("location_name") or "当前位置")
     condition = str(weather.get("condition") or "未知天气")
     temperature = float(weather.get("temperature") or 0.0)
     feels_like = float(weather.get("feels_like") or 0.0)
@@ -113,6 +118,8 @@ class WeatherManager:
         self.send_message = send_message
         self._json_request = json_request
         self._refresh_lock = asyncio.Lock()
+        self._location_lock = asyncio.Lock()
+        self._city_cache: dict[tuple[float, float], str] = {}
         self._broadcast_task: Optional[asyncio.Task] = None
         self._startup_task: Optional[asyncio.Task] = None
 
@@ -141,7 +148,15 @@ class WeatherManager:
 
     async def refresh(self, auto_locate: bool = False) -> bool:
         async with self._refresh_lock:
-            self.state.patch("weather", updating=True, status="更新中", error="")
+            updates = {
+                **self._empty_weather_values(),
+                "updating": True,
+                "status": "更新中",
+                "error": "",
+            }
+            if auto_locate:
+                updates.update(self._empty_location_values())
+            self.state.patch("weather", **updates)
             try:
                 snapshot = self.state.snapshot()["weather"]
                 latitude = snapshot.get("latitude")
@@ -151,6 +166,8 @@ class WeatherManager:
                     latitude = location["latitude"]
                     longitude = location["longitude"]
                     self.state.patch("weather", **location)
+                if not str(self.state.snapshot()["weather"].get("location_name") or "").strip():
+                    raise WeatherError("无法识别所在城市")
                 weather = await asyncio.to_thread(
                     self._fetch_current_weather,
                     float(latitude),
@@ -169,7 +186,7 @@ class WeatherManager:
             except (WeatherError, TypeError, ValueError) as exc:
                 self.state.patch(
                     "weather",
-                    ready=False,
+                    **self._empty_weather_values(),
                     updating=False,
                     status="更新失败",
                     error=str(exc),
@@ -183,16 +200,27 @@ class WeatherManager:
         longitude: float,
         accuracy: Optional[float] = None,
     ) -> bool:
-        latitude, longitude = self._validate_coordinates(latitude, longitude)
-        self.state.patch(
-            "weather",
-            latitude=latitude,
-            longitude=longitude,
-            location_name="当前位置",
-            location_source="browser",
-            location_accuracy=max(0.0, float(accuracy or 0.0)),
-        )
-        return await self.refresh()
+        async with self._location_lock:
+            self.state.patch("weather", updating=True, status="正在识别城市", error="")
+            try:
+                latitude, longitude = self._validate_coordinates(latitude, longitude)
+                city = await asyncio.to_thread(
+                    self._reverse_geocode_city,
+                    latitude,
+                    longitude,
+                )
+            except WeatherError as exc:
+                self._clear_unresolved_location(str(exc))
+                return False
+            self.state.patch(
+                "weather",
+                latitude=latitude,
+                longitude=longitude,
+                location_name=city,
+                location_source="browser",
+                location_accuracy=max(0.0, float(accuracy or 0.0)),
+            )
+            return await self.refresh()
 
     async def use_ip_location(self) -> bool:
         return await self.refresh(auto_locate=True)
@@ -209,25 +237,29 @@ class WeatherManager:
                 "format": "json",
             }
         )
-        data = await asyncio.to_thread(self._json_request, f"{GEOCODING_URL}?{params}")
+        try:
+            data = await asyncio.to_thread(self._json_request, f"{GEOCODING_URL}?{params}")
+        except WeatherError as exc:
+            self._clear_unresolved_location(str(exc))
+            raise
         results = data.get("results")
         if not isinstance(results, list) or not results:
+            self._clear_unresolved_location("没有找到这个城市")
             raise WeatherError("没有找到这个城市")
         result = results[0]
         latitude, longitude = self._validate_coordinates(
             result.get("latitude"),
             result.get("longitude"),
         )
-        location_name = self._location_name(
-            result.get("name"),
-            result.get("admin1"),
-            result.get("country"),
-        )
+        location_name = self._valid_city_name(result.get("name"))
+        if not location_name:
+            self._clear_unresolved_location("无法识别所在城市")
+            raise WeatherError("无法识别所在城市")
         self.state.patch(
             "weather",
             latitude=latitude,
             longitude=longitude,
-            location_name=location_name or query,
+            location_name=location_name,
             location_source="manual",
             location_accuracy=0.0,
         )
@@ -289,15 +321,13 @@ class WeatherManager:
             data.get("latitude"),
             data.get("longitude"),
         )
-        location_name = self._location_name(
-            data.get("city"),
-            data.get("region"),
-            data.get("country_name"),
-        )
+        location_name = self._valid_city_name(data.get("city"))
+        if not location_name:
+            raise WeatherError("IP 定位无法识别所在城市")
         return {
             "latitude": latitude,
             "longitude": longitude,
-            "location_name": location_name or "当前位置",
+            "location_name": location_name,
             "location_source": "ip",
             "location_accuracy": 0.0,
         }
@@ -335,6 +365,35 @@ class WeatherManager:
         except (KeyError, TypeError, ValueError) as exc:
             raise WeatherError("当前天气数据不完整") from exc
 
+    def _reverse_geocode_city(self, latitude: float, longitude: float) -> str:
+        cache_key = (round(latitude, 3), round(longitude, 3))
+        cached = self._city_cache.get(cache_key)
+        if cached:
+            return cached
+        params = urlencode(
+            {
+                "lat": f"{latitude:.6f}",
+                "lon": f"{longitude:.6f}",
+                "format": "jsonv2",
+                "addressdetails": 1,
+                "zoom": 10,
+                "accept-language": "zh-CN,zh,en",
+            }
+        )
+        data = self._json_request(f"{REVERSE_GEOCODING_URL}?{params}")
+        address = data.get("address")
+        if not isinstance(address, dict):
+            raise WeatherError("城市解析服务没有返回地址")
+        city = ""
+        for key in ("city", "town", "municipality"):
+            city = self._valid_city_name(address.get(key))
+            if city:
+                break
+        if not city:
+            raise WeatherError("无法识别所在城市")
+        self._city_cache[cache_key] = city
+        return city
+
     @staticmethod
     def _validate_coordinates(latitude: Any, longitude: Any) -> tuple[float, float]:
         try:
@@ -347,10 +406,45 @@ class WeatherManager:
         return latitude, longitude
 
     @staticmethod
-    def _location_name(*parts: Any) -> str:
-        names: list[str] = []
-        for part in parts:
-            name = str(part or "").strip()
-            if name and name.casefold() not in {item.casefold() for item in names}:
-                names.append(name)
-        return " · ".join(names[:2])
+    def _valid_city_name(value: Any) -> str:
+        name = str(value or "").strip()[:80]
+        if name.casefold() in {"当前位置", "当前位置天气", "current location"}:
+            return ""
+        return name
+
+    @staticmethod
+    def _empty_location_values() -> dict[str, Any]:
+        return {
+            "latitude": None,
+            "longitude": None,
+            "location_name": "",
+            "location_source": "",
+            "location_accuracy": 0.0,
+        }
+
+    @staticmethod
+    def _empty_weather_values() -> dict[str, Any]:
+        return {
+            "ready": False,
+            "temperature": None,
+            "feels_like": None,
+            "humidity": None,
+            "precipitation": None,
+            "wind_speed": None,
+            "weather_code": None,
+            "condition": "",
+            "timezone": "",
+            "weather_time": "",
+            "last_update": "",
+            "last_message": "",
+        }
+
+    def _clear_unresolved_location(self, error: str) -> None:
+        self.state.patch(
+            "weather",
+            **self._empty_location_values(),
+            **self._empty_weather_values(),
+            updating=False,
+            status="定位失败",
+            error=error,
+        )

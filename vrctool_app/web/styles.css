@@ -887,6 +887,11 @@ h3 {
   line-height: 1.5;
 }
 
+.weather-attribution {
+  width: fit-content;
+  color: var(--muted);
+}
+
 .gradient-b::before {
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent-2) 16%, transparent), transparent 48%);
 }

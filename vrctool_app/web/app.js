@@ -499,9 +499,9 @@ function renderWeatherState(weather) {
   $("weatherTemperature").textContent = ready
     ? Number(weather.temperature || 0).toFixed(1)
     : "--";
-  $("weatherCondition").textContent = weather.condition || "暂无天气数据";
-  $("weatherLocation").textContent = weather.location_name || "尚未定位";
-  const source = sourceLabels[weather.location_source] || "等待自动定位";
+  $("weatherCondition").textContent = ready ? weather.condition || "" : "";
+  $("weatherLocation").textContent = weather.location_name || "";
+  const source = weather.location_name ? sourceLabels[weather.location_source] || "" : "";
   const accuracy = weather.location_source === "browser" && Number(weather.location_accuracy) > 0
     ? ` · 约 ${Math.round(Number(weather.location_accuracy))} 米`
     : "";
@@ -558,12 +558,16 @@ async function requestWeatherLocation(force = false) {
     return;
   }
   navigator.geolocation.getCurrentPosition(
-    (position) => {
-      api("/api/weather/location", {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        accuracy: position.coords.accuracy,
-      }).catch(async () => useIpFallback());
+    async (position) => {
+      try {
+        await api("/api/weather/location", {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        });
+      } catch (_error) {
+        await useIpFallback();
+      }
     },
     () => useIpFallback(),
     { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
