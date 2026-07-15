@@ -9,6 +9,8 @@ import threading
 import time
 import webbrowser
 from typing import Optional
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
 
 import uvicorn
 
@@ -25,10 +27,38 @@ CTRL_CLOSE_EVENT = 2
 CTRL_LOGOFF_EVENT = 5
 CTRL_SHUTDOWN_EVENT = 6
 WINDOWS_CTRL_EVENTS = {0, 1, CTRL_CLOSE_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT}
+BROWSER_READY_TIMEOUT = 60.0
+BROWSER_READY_POLL_INTERVAL = 0.2
 
 server: Optional[uvicorn.Server] = None
 shutdown_started = threading.Event()
 console_handler_ref = None
+
+
+def wait_for_web_ready(
+    url: str,
+    timeout: float = BROWSER_READY_TIMEOUT,
+    poll_interval: float = BROWSER_READY_POLL_INTERVAL,
+) -> bool:
+    status_url = f"{url.rstrip('/')}/api/status"
+    deadline = time.monotonic() + max(0.0, timeout)
+    while not shutdown_started.is_set() and time.monotonic() <= deadline:
+        try:
+            with urlopen(status_url, timeout=1.0) as response:
+                if 200 <= int(response.status) < 300:
+                    return True
+        except (HTTPError, URLError, OSError, TimeoutError, ValueError):
+            pass
+        time.sleep(max(0.01, poll_interval))
+    return False
+
+
+def open_browser_when_ready(url: str, timeout: float = BROWSER_READY_TIMEOUT) -> bool:
+    if not wait_for_web_ready(url, timeout=timeout):
+        print("Web service did not become ready; automatic browser launch was cancelled.")
+        return False
+    webbrowser.open(url)
+    return True
 
 
 def request_server_stop(reason: str) -> None:
@@ -191,8 +221,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         print("vrctool 已经在运行，为了避免组件冲突，本次启动已取消。")
         print(f"已运行网页地址：{running_url}")
         if not args.no_browser:
-            webbrowser.open(str(running_url))
-        time.sleep(3)
+            open_browser_when_ready(str(running_url))
         return 0
 
     if not is_tcp_port_available(args.host, web_port):
@@ -224,7 +253,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     print("关闭方式：在这个窗口按 Ctrl+C，或直接关闭这个窗口，后端会一起退出。")
 
     if not args.no_browser:
-        threading.Timer(1.2, lambda: webbrowser.open(url)).start()
+        threading.Thread(
+            target=open_browser_when_ready,
+            args=(url,),
+            name="vrctool-browser-launcher",
+            daemon=True,
+        ).start()
 
     try:
         server.run()

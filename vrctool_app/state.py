@@ -141,6 +141,7 @@ class RuntimeState:
                 "condition": "",
                 "timezone": "",
                 "weather_time": "",
+                "weather_provider": "",
                 "status": "等待定位",
                 "error": "",
                 "last_update": "",

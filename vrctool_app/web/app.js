@@ -512,10 +512,12 @@ function renderWeatherState(weather) {
   $("weatherPrecipitation").textContent = weatherMetric(weather.precipitation, " mm");
   $("weatherLastUpdate").textContent = `最近更新 ${weather.last_update || "-"}`;
   $("weatherTimezone").textContent = `时区 ${weather.timezone || "-"}`;
+  const provider = weather.weather_provider ? `天气源：${weather.weather_provider}。` : "";
+  const locationHint = weather.location_source === "ip"
+    ? "当前使用 IP 估算位置；使用代理时可能不准确，可点“自动定位”重新授权。"
+    : "定位成功，天气数据会按设置的间隔更新。";
   $("weatherReason").textContent = weather.error
-    || (weather.location_source === "ip"
-      ? "当前使用 IP 估算位置；使用代理时可能不准确，可点“自动定位”重新授权。"
-      : "定位成功，天气数据会按设置的间隔更新。");
+    || `${provider}${locationHint}`;
   $("weatherLastSent").textContent = weather.last_sent
     ? `最近发送 ${weather.last_sent}`
     : "尚未发送";

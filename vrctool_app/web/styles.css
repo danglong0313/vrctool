@@ -892,6 +892,12 @@ h3 {
   color: var(--muted);
 }
 
+.weather-attributions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
 .gradient-b::before {
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent-2) 16%, transparent), transparent 48%);
 }

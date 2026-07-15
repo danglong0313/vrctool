@@ -19,11 +19,49 @@ MAX_WEATHER_INTERVAL = 3600.0
 IP_LOCATION_URL = "https://ipapi.co/json/"
 WEATHER_URL = "https://api.open-meteo.com/v1/forecast"
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
+DOMESTIC_IP_LOCATION_URL = os.environ.get(
+    "VRCTOOL_DOMESTIC_IP_LOCATION_URL",
+    "https://uapis.cn/api/v1/network/myip",
+)
+DOMESTIC_DISTRICT_URL = os.environ.get(
+    "VRCTOOL_DOMESTIC_DISTRICT_URL",
+    "https://uapis.cn/api/v1/misc/district",
+)
+DOMESTIC_WEATHER_URL = os.environ.get(
+    "VRCTOOL_DOMESTIC_WEATHER_URL",
+    "https://uapis.cn/api/v1/misc/weather",
+)
 REVERSE_GEOCODING_URL = os.environ.get(
     "VRCTOOL_REVERSE_GEOCODING_URL",
     "https://nominatim.openstreetmap.org/reverse",
 )
 USER_AGENT = f"vrctool/{__version__} (+https://github.com/danglong0313/vrctool)"
+
+DIRECT_MUNICIPALITIES = {"北京市", "上海市", "天津市", "重庆市"}
+CHINESE_ADMIN_SUFFIXES = (
+    "特别行政区",
+    "自治区",
+    "自治州",
+    "地区",
+    "市",
+    "区",
+    "县",
+    "盟",
+    "旗",
+    "省",
+)
+MUNICIPALITY_ALIASES = {
+    "北京": "北京市",
+    "上海": "上海市",
+    "天津": "天津市",
+    "重庆": "重庆市",
+}
+MUNICIPALITY_BY_ISO_CODE = {
+    "CN-BJ": "北京市",
+    "CN-SH": "上海市",
+    "CN-TJ": "天津市",
+    "CN-CQ": "重庆市",
+}
 
 WEATHER_CODE_LABELS = {
     0: "晴",
@@ -161,17 +199,20 @@ class WeatherManager:
                 snapshot = self.state.snapshot()["weather"]
                 latitude = snapshot.get("latitude")
                 longitude = snapshot.get("longitude")
-                if auto_locate or latitude is None or longitude is None:
+                location_name = str(snapshot.get("location_name") or "").strip()
+                if auto_locate or not location_name:
                     location = await asyncio.to_thread(self._locate_by_ip)
                     latitude = location["latitude"]
                     longitude = location["longitude"]
                     self.state.patch("weather", **location)
-                if not str(self.state.snapshot()["weather"].get("location_name") or "").strip():
+                    location_name = str(location.get("location_name") or "").strip()
+                if not location_name:
                     raise WeatherError("无法识别所在城市")
                 weather = await asyncio.to_thread(
                     self._fetch_current_weather,
-                    float(latitude),
-                    float(longitude),
+                    float(latitude) if latitude is not None else None,
+                    float(longitude) if longitude is not None else None,
+                    location_name,
                 )
                 self.state.patch(
                     "weather",
@@ -229,37 +270,19 @@ class WeatherManager:
         query = str(query or "").strip()
         if not query:
             raise WeatherError("请输入城市名称")
-        params = urlencode(
-            {
-                "name": query[:80],
-                "count": 1,
-                "language": "zh",
-                "format": "json",
-            }
-        )
         try:
-            data = await asyncio.to_thread(self._json_request, f"{GEOCODING_URL}?{params}")
-        except WeatherError as exc:
-            self._clear_unresolved_location(str(exc))
-            raise
-        results = data.get("results")
-        if not isinstance(results, list) or not results:
-            self._clear_unresolved_location("没有找到这个城市")
-            raise WeatherError("没有找到这个城市")
-        result = results[0]
-        latitude, longitude = self._validate_coordinates(
-            result.get("latitude"),
-            result.get("longitude"),
-        )
-        location_name = self._valid_city_name(result.get("name"))
-        if not location_name:
-            self._clear_unresolved_location("无法识别所在城市")
-            raise WeatherError("无法识别所在城市")
+            location = await asyncio.to_thread(self._search_city_domestic, query)
+        except WeatherError as domestic_error:
+            try:
+                location = await asyncio.to_thread(self._search_city_open_meteo, query)
+                self.state.log("warn", f"国内城市搜索不可用，已切换 Open-Meteo：{domestic_error}")
+            except WeatherError as open_meteo_error:
+                error = f"城市搜索失败：{domestic_error}；{open_meteo_error}"
+                self._clear_unresolved_location(error)
+                raise WeatherError(error) from open_meteo_error
         self.state.patch(
             "weather",
-            latitude=latitude,
-            longitude=longitude,
-            location_name=location_name,
+            **location,
             location_source="manual",
             location_accuracy=0.0,
         )
@@ -291,7 +314,7 @@ class WeatherManager:
         while self.state.snapshot()["weather"].get("broadcast_enabled"):
             snapshot = self.state.snapshot()["weather"]
             success = await self.refresh(
-                auto_locate=snapshot.get("latitude") is None or snapshot.get("longitude") is None
+                auto_locate=not str(snapshot.get("location_name") or "").strip()
             )
             weather = self.state.snapshot()["weather"]
             if success:
@@ -314,6 +337,43 @@ class WeatherManager:
             await asyncio.sleep(interval)
 
     def _locate_by_ip(self) -> dict[str, Any]:
+        try:
+            return self._locate_by_domestic_ip()
+        except WeatherError as domestic_error:
+            try:
+                location = self._locate_by_ipapi()
+                self.state.log("warn", f"国内 IP 定位不可用，已切换 ipapi：{domestic_error}")
+                return location
+            except WeatherError as ipapi_error:
+                raise WeatherError(
+                    f"IP 定位服务均不可用：{domestic_error}；{ipapi_error}"
+                ) from ipapi_error
+
+    def _locate_by_domestic_ip(self) -> dict[str, Any]:
+        data = self._json_request(DOMESTIC_IP_LOCATION_URL)
+        latitude, longitude = self._validate_coordinates(
+            data.get("latitude"),
+            data.get("longitude"),
+        )
+        location_name = ""
+        try:
+            location_name = self._reverse_geocode_city(latitude, longitude)
+        except WeatherError:
+            region_parts = [part for part in str(data.get("region") or "").split() if part]
+            province = region_parts[-2] if len(region_parts) >= 2 else ""
+            city = region_parts[-1] if region_parts else ""
+            location_name = self._format_location_name(province, city, "")
+        if not location_name:
+            raise WeatherError("国内 IP 定位无法识别所在城市")
+        return {
+            "latitude": latitude,
+            "longitude": longitude,
+            "location_name": location_name,
+            "location_source": "ip",
+            "location_accuracy": 0.0,
+        }
+
+    def _locate_by_ipapi(self) -> dict[str, Any]:
         data = self._json_request(IP_LOCATION_URL)
         if data.get("error"):
             raise WeatherError(str(data.get("reason") or "IP 定位失败"))
@@ -321,7 +381,11 @@ class WeatherManager:
             data.get("latitude"),
             data.get("longitude"),
         )
-        location_name = self._valid_city_name(data.get("city"))
+        location_name = self._format_location_name(
+            data.get("region"),
+            data.get("city"),
+            data.get("district"),
+        )
         if not location_name:
             raise WeatherError("IP 定位无法识别所在城市")
         return {
@@ -332,7 +396,35 @@ class WeatherManager:
             "location_accuracy": 0.0,
         }
 
-    def _fetch_current_weather(self, latitude: float, longitude: float) -> dict[str, Any]:
+    def _fetch_current_weather(
+        self,
+        latitude: Optional[float],
+        longitude: Optional[float],
+        location_name: str,
+    ) -> dict[str, Any]:
+        primary_error: Optional[WeatherError] = None
+        if latitude is not None and longitude is not None:
+            try:
+                return self._fetch_open_meteo_weather(latitude, longitude)
+            except WeatherError as exc:
+                primary_error = exc
+        try:
+            weather = self._fetch_domestic_weather(location_name)
+        except WeatherError as domestic_error:
+            if primary_error:
+                raise WeatherError(
+                    f"天气主服务和国内备用源均不可用：{primary_error}；{domestic_error}"
+                ) from domestic_error
+            raise
+        if primary_error:
+            self.state.log("warn", f"Open-Meteo 不可用，已切换国内天气源：{primary_error}")
+        return weather
+
+    def _fetch_open_meteo_weather(
+        self,
+        latitude: float,
+        longitude: float,
+    ) -> dict[str, Any]:
         params = urlencode(
             {
                 "latitude": f"{latitude:.6f}",
@@ -361,38 +453,184 @@ class WeatherManager:
                 "condition": weather_code_label(code),
                 "timezone": str(data.get("timezone") or ""),
                 "weather_time": str(current.get("time") or ""),
+                "weather_provider": "Open-Meteo",
             }
         except (KeyError, TypeError, ValueError) as exc:
             raise WeatherError("当前天气数据不完整") from exc
+
+    def _fetch_domestic_weather(self, location_name: str) -> dict[str, Any]:
+        params = urlencode(
+            {
+                "city": location_name[:80],
+                "extended": "true",
+                "hourly": "true",
+                "lang": "zh",
+            }
+        )
+        data = self._json_request(f"{DOMESTIC_WEATHER_URL}?{params}")
+        hourly = data.get("hourly_forecast")
+        current_hour = hourly[0] if isinstance(hourly, list) and hourly else {}
+        if not isinstance(current_hour, dict):
+            current_hour = {}
+        try:
+            temperature = float(data["temperature"])
+            condition = self._valid_city_name(data.get("weather"))
+            if not condition:
+                raise ValueError("missing weather description")
+            weather = {
+                "temperature": temperature,
+                "feels_like": float(data.get("feels_like", temperature)),
+                "humidity": int(float(data["humidity"])),
+                "precipitation": float(
+                    data.get("precipitation", current_hour.get("precip", 0.0)) or 0.0
+                ),
+                "wind_speed": float(current_hour.get("wind_speed", 0.0) or 0.0),
+                "weather_code": None,
+                "condition": condition,
+                "timezone": "Asia/Shanghai" if data.get("adcode") else "",
+                "weather_time": str(data.get("report_time") or current_hour.get("time") or ""),
+                "weather_provider": "UAPI 国内备用源",
+            }
+        except (KeyError, TypeError, ValueError) as exc:
+            raise WeatherError("国内天气源返回的数据不完整") from exc
+        resolved_name = self._format_location_name(
+            data.get("province"),
+            data.get("city"),
+            data.get("district"),
+        )
+        if resolved_name:
+            weather["location_name"] = resolved_name
+        return weather
 
     def _reverse_geocode_city(self, latitude: float, longitude: float) -> str:
         cache_key = (round(latitude, 3), round(longitude, 3))
         cached = self._city_cache.get(cache_key)
         if cached:
             return cached
+        domestic_error: Optional[WeatherError] = None
+        params = urlencode(
+            {
+                "lat": f"{latitude:.6f}",
+                "lng": f"{longitude:.6f}",
+                "limit": 8,
+            }
+        )
+        try:
+            data = self._json_request(f"{DOMESTIC_DISTRICT_URL}?{params}")
+            city = self._location_from_district_results(data)
+            self._city_cache[cache_key] = city
+            return city
+        except WeatherError as exc:
+            domestic_error = exc
         params = urlencode(
             {
                 "lat": f"{latitude:.6f}",
                 "lon": f"{longitude:.6f}",
                 "format": "jsonv2",
                 "addressdetails": 1,
-                "zoom": 10,
+                "zoom": 14,
                 "accept-language": "zh-CN,zh,en",
             }
         )
-        data = self._json_request(f"{REVERSE_GEOCODING_URL}?{params}")
-        address = data.get("address")
-        if not isinstance(address, dict):
-            raise WeatherError("城市解析服务没有返回地址")
-        city = ""
-        for key in ("city", "town", "municipality"):
-            city = self._valid_city_name(address.get(key))
-            if city:
-                break
-        if not city:
-            raise WeatherError("无法识别所在城市")
+        try:
+            data = self._json_request(f"{REVERSE_GEOCODING_URL}?{params}")
+            city = self._location_from_nominatim(data)
+        except WeatherError as nominatim_error:
+            raise WeatherError(
+                f"城市解析服务均不可用：{domestic_error}；{nominatim_error}"
+            ) from nominatim_error
         self._city_cache[cache_key] = city
         return city
+
+    def _search_city_domestic(self, query: str) -> dict[str, Any]:
+        params = urlencode({"keywords": query[:80], "limit": 5})
+        data = self._json_request(f"{DOMESTIC_DISTRICT_URL}?{params}")
+        result = self._first_district_result(data)
+        center = result.get("center")
+        if not isinstance(center, dict):
+            raise WeatherError("国内城市搜索没有返回有效坐标")
+        latitude, longitude = self._validate_coordinates(center.get("lat"), center.get("lng"))
+        location_name = self._location_from_district_result(result)
+        return {
+            "latitude": latitude,
+            "longitude": longitude,
+            "location_name": location_name,
+        }
+
+    def _search_city_open_meteo(self, query: str) -> dict[str, Any]:
+        params = urlencode(
+            {
+                "name": query[:80],
+                "count": 1,
+                "language": "zh",
+                "format": "json",
+            }
+        )
+        data = self._json_request(f"{GEOCODING_URL}?{params}")
+        results = data.get("results")
+        if not isinstance(results, list) or not results:
+            raise WeatherError("没有找到这个城市")
+        result = results[0]
+        latitude, longitude = self._validate_coordinates(
+            result.get("latitude"),
+            result.get("longitude"),
+        )
+        city_name = result.get("name")
+        if str(result.get("country_code") or "").upper() == "CN" or str(
+            result.get("country") or ""
+        ) in {"中国", "中华人民共和国"}:
+            city_name = self._ensure_chinese_city_suffix(city_name)
+        location_name = self._format_location_name(
+            result.get("admin1"),
+            city_name,
+            result.get("admin2"),
+        )
+        if not location_name:
+            raise WeatherError("无法识别所在城市")
+        return {
+            "latitude": latitude,
+            "longitude": longitude,
+            "location_name": location_name,
+        }
+
+    def _location_from_district_results(self, data: dict[str, Any]) -> str:
+        return self._location_from_district_result(self._first_district_result(data))
+
+    @staticmethod
+    def _first_district_result(data: dict[str, Any]) -> dict[str, Any]:
+        results = data.get("results")
+        if not isinstance(results, list) or not results or not isinstance(results[0], dict):
+            raise WeatherError("国内城市解析服务没有返回行政区")
+        return results[0]
+
+    def _location_from_district_result(self, result: dict[str, Any]) -> str:
+        district = result.get("district")
+        if not district and str(result.get("level") or "") == "district":
+            district = result.get("name")
+        location_name = self._format_location_name(
+            result.get("province"),
+            result.get("city"),
+            district,
+        )
+        if not location_name:
+            location_name = self._valid_city_name(result.get("name"))
+        if not location_name:
+            raise WeatherError("国内城市解析服务无法识别所在城市")
+        return location_name
+
+    def _location_from_nominatim(self, data: dict[str, Any]) -> str:
+        address = data.get("address")
+        if not isinstance(address, dict):
+            raise WeatherError("OpenStreetMap 没有返回地址")
+        iso_code = str(address.get("ISO3166-2-lvl4") or "").upper()
+        province = address.get("state") or address.get("province")
+        province = MUNICIPALITY_BY_ISO_CODE.get(iso_code, province)
+        city = address.get("city") or address.get("town") or address.get("municipality")
+        district = address.get("city_district") or address.get("county")
+        location_name = self._format_location_name(province, city, district)
+        if not location_name:
+            raise WeatherError("OpenStreetMap 无法识别所在城市")
+        return location_name
 
     @staticmethod
     def _validate_coordinates(latitude: Any, longitude: Any) -> tuple[float, float]:
@@ -410,6 +648,44 @@ class WeatherManager:
         name = str(value or "").strip()[:80]
         if name.casefold() in {"当前位置", "当前位置天气", "current location"}:
             return ""
+        return name
+
+    @classmethod
+    def _format_location_name(cls, province: Any, city: Any, district: Any) -> str:
+        province_name = cls._valid_city_name(province)
+        city_name = cls._valid_city_name(city)
+        district_name = cls._valid_city_name(district)
+        province_name = MUNICIPALITY_ALIASES.get(province_name, province_name)
+        if not province_name and city_name in MUNICIPALITY_ALIASES:
+            province_name = MUNICIPALITY_ALIASES[city_name]
+
+        if province_name in DIRECT_MUNICIPALITIES:
+            if not district_name and city_name.endswith(("区", "县")):
+                district_name = city_name
+            return cls._join_location_parts(province_name, district_name)
+
+        primary = city_name or province_name
+        return cls._join_location_parts(primary, district_name)
+
+    @staticmethod
+    def _join_location_parts(primary: str, secondary: str) -> str:
+        if not primary:
+            return secondary
+        if not secondary or secondary == primary:
+            return primary
+        if secondary.startswith(primary):
+            return secondary
+        if primary.endswith(secondary):
+            return primary
+        return f"{primary}{secondary}"[:80]
+
+    @classmethod
+    def _ensure_chinese_city_suffix(cls, value: Any) -> str:
+        name = cls._valid_city_name(value)
+        if not name or name.endswith(CHINESE_ADMIN_SUFFIXES):
+            return name
+        if any("\u4e00" <= character <= "\u9fff" for character in name):
+            return f"{name}市"[:80]
         return name
 
     @staticmethod
@@ -435,6 +711,7 @@ class WeatherManager:
             "condition": "",
             "timezone": "",
             "weather_time": "",
+            "weather_provider": "",
             "last_update": "",
             "last_message": "",
         }

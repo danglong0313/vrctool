@@ -4,8 +4,15 @@ import contextlib
 import io
 import unittest
 from unittest.mock import MagicMock, patch
+from urllib.error import URLError
 
-from vrctool_app.launcher import main, parse_args, run_upgrade
+from vrctool_app.launcher import (
+    main,
+    open_browser_when_ready,
+    parse_args,
+    run_upgrade,
+    wait_for_web_ready,
+)
 
 
 class LauncherArgumentTests(unittest.TestCase):
@@ -78,6 +85,45 @@ class LauncherArgumentTests(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
                 parse_args(["-p", "70000"])
+
+    def test_web_readiness_retries_until_status_endpoint_responds(self) -> None:
+        response = MagicMock()
+        response.status = 200
+        response.__enter__.return_value = response
+        with (
+            patch(
+                "vrctool_app.launcher.urlopen",
+                side_effect=[URLError("not ready"), response],
+            ) as request,
+            patch("vrctool_app.launcher.time.sleep"),
+        ):
+            ready = wait_for_web_ready("http://127.0.0.1:8765", timeout=1.0)
+
+        self.assertTrue(ready)
+        self.assertEqual(request.call_count, 2)
+        request.assert_called_with("http://127.0.0.1:8765/api/status", timeout=1.0)
+
+    def test_browser_opens_only_after_web_service_is_ready(self) -> None:
+        with (
+            patch("vrctool_app.launcher.wait_for_web_ready", return_value=True) as wait,
+            patch("vrctool_app.launcher.webbrowser.open") as browser_open,
+        ):
+            opened = open_browser_when_ready("http://127.0.0.1:8765")
+
+        self.assertTrue(opened)
+        wait.assert_called_once_with("http://127.0.0.1:8765", timeout=60.0)
+        browser_open.assert_called_once_with("http://127.0.0.1:8765")
+
+    def test_browser_is_not_opened_when_web_service_never_becomes_ready(self) -> None:
+        with (
+            patch("vrctool_app.launcher.wait_for_web_ready", return_value=False),
+            patch("vrctool_app.launcher.webbrowser.open") as browser_open,
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            opened = open_browser_when_ready("http://127.0.0.1:8765")
+
+        self.assertFalse(opened)
+        browser_open.assert_not_called()
 
 
 if __name__ == "__main__":

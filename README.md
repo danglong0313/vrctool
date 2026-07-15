@@ -31,6 +31,14 @@
 - 控制台式网页界面：左侧分区导航和基础设置弹窗，右侧任务工作区，支持浅色/深色主题切换。
 - 郊狼强度环形可视化，会随 A/B 通道强度实时变化。
 
+## v2.4.2 更新内容
+
+- 这是 v2.4.1 的后续补丁更新，修复中国大陆网络访问天气服务时可能返回 403 的问题。
+- Open-Meteo 不可用时自动切换 UAPI 国内备用天气源；国内 IP 定位与行政区解析也会优先使用国内接口。
+- 天气地点补全为地级市与区县，例如“北京市朝阳区”，国内服务不可用时仍会继续使用原有国际服务回退。
+- 天气页面显示当前实际使用的数据源，并支持通过环境变量替换为自建镜像地址。
+- 启动器改为等待网页服务完全就绪后再打开浏览器，避免启动较慢时先弹出“拒绝连接”。
+
 ## v2.4.1 更新内容
 
 - 修复浏览器定位后城市显示成“当前位置天气”的问题。
@@ -66,11 +74,11 @@
 
 | 文件名                      | 用途                                                             |
 | --------------------------- | ---------------------------------------------------------------- |
-| `vrctool-setup-2.4.1.exe` | 安装包，会创建安装记录、快捷方式并配置命令行。 |
+| `vrctool-setup-2.4.2.exe` | 安装包，会创建安装记录、快捷方式并配置命令行。 |
 
 安装步骤：
 
-1. 从 [GitHub Releases](https://github.com/danglong0313/vrctool/releases) 下载 `vrctool-setup-2.4.1.exe`。
+1. 从 [GitHub Releases](https://github.com/danglong0313/vrctool/releases) 下载 `vrctool-setup-2.4.2.exe`。
 2. 双击安装包；首屏可在“简体中文”和 English 之间切换。
 3. 按照提示完成安装，不需要管理员权限。
 4. 从开始菜单或桌面快捷方式启动 vrctool。
@@ -272,13 +280,15 @@ FPS: 72.3 | Frame: 13.9ms
 ## 天气广播
 
 1. 打开网页 `天气` 分区。
-2. 浏览器会请求位置权限；允许后会将设备坐标反向解析为城市名，再查询天气。
+2. 浏览器会请求位置权限；允许后会将设备坐标反向解析为“地级市 + 区/县”，例如 `北京市朝阳区`，再查询天气。
 3. 若拒绝授权或浏览器定位不可用，vrctool 会自动改用 IP 估算位置。也可以在输入框中搜索城市手动修正。
 4. 确认页面中的位置和天气后，打开 `ChatBox 广播` 并设置更新间隔。
 
 天气广播默认关闭，默认间隔为 10 分钟，可在 5 到 60 分钟之间调整。启用后会立即更新并发送一次，之后按设置间隔重新获取天气。与其他广播同时开启时，新天气会进入 ChatBox 批量轮播，发送一次后等待下一次天气更新。
 
-天气数据和城市搜索来自 [Open-Meteo](https://open-meteo.com/)，浏览器坐标的城市解析使用 [OpenStreetMap Nominatim](https://nominatim.org/release-docs/develop/api/Reverse/)，自动定位回退使用 [ipapi](https://ipapi.co/)，均不需要用户填写 API Key。城市解析只在用户触发定位时执行，不会随天气刷新重复请求；浏览器定位坐标不写入配置文件，配置文件只保存天气广播开关和间隔。城市数据遵循 OpenStreetMap 的 [ODbL 许可与署名要求](https://www.openstreetmap.org/copyright)。
+天气主数据源为 [Open-Meteo](https://open-meteo.com/)。国内网络出现 `403`、超时或无效响应时，程序会自动切换到 [UAPI 国内备用天气源](https://uapis.cn/docs/api-reference/get-misc-weather)；国内 IP 定位和省/市/区县解析也优先使用 UAPI 的国内接口，失败后再回退到 [ipapi](https://ipapi.co/) 和 [OpenStreetMap Nominatim](https://nominatim.org/release-docs/develop/api/Reverse/)。这些默认接口均不需要用户填写 API Key，也可通过 `VRCTOOL_DOMESTIC_WEATHER_URL`、`VRCTOOL_DOMESTIC_DISTRICT_URL`、`VRCTOOL_DOMESTIC_IP_LOCATION_URL` 和 `VRCTOOL_REVERSE_GEOCODING_URL` 环境变量替换为自建镜像。
+
+城市解析只在定位或手动搜索时执行，不会随天气刷新重复请求；浏览器定位坐标不写入配置文件，配置文件只保存天气广播开关和间隔。使用 OpenStreetMap 回退时，城市数据遵循其 [ODbL 许可与署名要求](https://www.openstreetmap.org/copyright)。网页会显示本次天气使用的实际数据源。
 
 IP 定位只能估算城市，使用 VPN、代理、移动网络或运营商异地出口时可能显示错误地点。遇到这种情况，请点击 `自动定位` 并允许浏览器位置权限，或手动搜索城市。任何定位方式无法识别城市时，页面会清空地点和天气值并停止发送，不会使用“当前位置”作为占位城市。天气功能需要网络连接，外部服务不可用时不会影响其他功能。
 
@@ -316,7 +326,7 @@ config.json
 需要打包时按照 [packaging/README.md](packaging/README.md) 执行一次性 PyInstaller 和 Inno Setup 命令，最终只输出安装包：
 
 ```text
-dist\vrctool-setup-2.4.1.exe
+dist\vrctool-setup-2.4.2.exe
 ```
 
 目录包中的 `_internal` 是安装器的临时构建内容，不单独发布；安装器会自动将其放入默认程序目录。应用内更新只下载并运行 `setup` 安装包，更新时会替换旧 `_internal` 内容，用户配置仍保存在 `%LOCALAPPDATA%\vrctool\config.json`。安装器首屏支持“简体中文”和 English 切换。
