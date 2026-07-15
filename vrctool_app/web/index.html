@@ -6,9 +6,9 @@
     <title>vrctool</title>
     <link rel="icon" type="image/png" href="/logo.png?v=20260714-favicon-1" />
     <meta http-equiv="Cache-Control" content="no-store" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260714-release-notes-1" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260715-weather-1" />
     <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-    <script defer src="/static/app.js?v=20260714-release-notes-1"></script>
+    <script defer src="/static/app.js?v=20260715-weather-1"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -35,6 +35,10 @@
           <button class="nav-item" type="button" data-section="performance">
             <i data-lucide="gauge"></i>
             游戏帧率
+          </button>
+          <button class="nav-item" type="button" data-section="weather">
+            <i data-lucide="cloud-sun"></i>
+            天气
           </button>
           <button class="nav-item" type="button" data-section="dglab">
             <i data-lucide="activity"></i>
@@ -67,7 +71,7 @@
         <section class="side-card update-card" id="updateCard" aria-labelledby="updateCardTitle">
           <div class="side-card-head">
             <span id="updateCardTitle">应用更新</span>
-            <span class="version-badge" id="currentVersion">v2.3.2</span>
+            <span class="version-badge" id="currentVersion">v2.4.0</span>
           </div>
           <div class="update-summary">
             <strong id="updateTitle">等待检查</strong>
@@ -412,6 +416,91 @@
           </div>
         </section>
 
+        <section class="section-page" data-page="weather">
+          <div class="panel-grid two weather-layout">
+            <section class="task-card weather-card" id="weatherCard">
+              <div class="panel-head">
+                <h3>当前天气</h3>
+                <span class="chip is-warn" id="weatherStatus">等待定位</span>
+              </div>
+              <div class="weather-hero">
+                <div class="weather-icon" aria-hidden="true">
+                  <i data-lucide="cloud-sun"></i>
+                </div>
+                <div class="weather-temperature">
+                  <strong id="weatherTemperature">--</strong><span>°C</span>
+                  <small id="weatherCondition">暂无天气数据</small>
+                </div>
+              </div>
+              <div class="weather-location">
+                <i data-lucide="map-pin"></i>
+                <div>
+                  <strong id="weatherLocation">尚未定位</strong>
+                  <small id="weatherLocationSource">打开本页后自动获取位置</small>
+                </div>
+              </div>
+              <div class="weather-metrics">
+                <div><span>体感</span><strong id="weatherFeelsLike">--°C</strong></div>
+                <div><span>湿度</span><strong id="weatherHumidity">--%</strong></div>
+                <div><span>风速</span><strong id="weatherWind">-- km/h</strong></div>
+                <div><span>降水</span><strong id="weatherPrecipitation">-- mm</strong></div>
+              </div>
+              <div class="performance-meta">
+                <span id="weatherLastUpdate">最近更新 -</span>
+                <span id="weatherTimezone">时区 -</span>
+              </div>
+              <p class="performance-reason" id="weatherReason">允许浏览器定位可获得更准确的本地天气。</p>
+            </section>
+
+            <section class="task-card weather-settings">
+              <div class="panel-head">
+                <h3>定位与广播</h3>
+                <span class="mini" id="weatherLastSent">尚未发送</span>
+              </div>
+              <div class="weather-actions">
+                <button class="ghost" id="weatherAutoLocate" type="button">
+                  <i data-lucide="locate-fixed"></i>
+                  自动定位
+                </button>
+                <button class="ghost" id="weatherRefresh" type="button">
+                  <i data-lucide="refresh-cw"></i>
+                  刷新天气
+                </button>
+              </div>
+              <div class="field-block">
+                <label class="field-label" for="weatherCity">手动选择城市</label>
+                <div class="weather-city-search">
+                  <input id="weatherCity" type="text" maxlength="80" placeholder="例如：上海、Tokyo" />
+                  <button id="weatherSearchCity" type="button" aria-label="搜索城市" title="搜索城市">
+                    <i data-lucide="search"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="toggle-row">
+                <span>ChatBox 广播</span>
+                <button
+                  class="switch"
+                  id="weatherBroadcast"
+                  type="button"
+                  aria-label="切换天气 ChatBox 广播"
+                  aria-pressed="false"
+                ></button>
+              </div>
+              <label>
+                <span>更新与发送间隔（分钟）</span>
+                <input id="weatherInterval" type="number" min="5" max="60" step="1" value="10" />
+              </label>
+              <p class="mini weather-broadcast-preview" id="weatherPreview">
+                定位成功后将发送地点、天气、温度、湿度、风速和降水。
+              </p>
+              <button class="primary" id="saveWeatherSettings" type="button">
+                <i data-lucide="save"></i>
+                应用设置
+              </button>
+            </section>
+          </div>
+        </section>
+
         <section class="section-page" data-page="dglab">
           <div class="dglab-layout">
             <section class="task-card visual-card">
@@ -643,7 +732,7 @@
             </div>
           </div>
           <div class="release-notes-head-actions">
-            <span class="version-badge" id="releaseNotesVersion">v2.3.2</span>
+            <span class="version-badge" id="releaseNotesVersion">v2.4.0</span>
             <button class="icon-button ghost" id="dismissReleaseNotesModal" type="button" title="关闭">
               <i data-lucide="x"></i>
             </button>

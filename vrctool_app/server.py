@@ -24,6 +24,7 @@ from vrctool_app.performance import PerformanceManager
 from vrctool_app.release_notes import current_release_notes, should_show_release_notes
 from vrctool_app.state import RuntimeState
 from vrctool_app.update_manager import UpdateError, UpdateManager
+from vrctool_app.weather import WeatherError, WeatherManager
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 WEB_DIR = PACKAGE_DIR / "web"
@@ -34,7 +35,7 @@ app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
 state = RuntimeState()
 config = load_config()
-for config_section in ("chatbox", "dglab", "heart_rate", "performance", "osc"):
+for config_section in ("chatbox", "dglab", "heart_rate", "performance", "weather", "osc"):
     state.patch(config_section, **config.get(config_section, {}))
 configured_web_port = get_configured_web_port(config)
 try:
@@ -70,6 +71,14 @@ heart_rate = HeartRateManager(
 performance = PerformanceManager(
     state,
     lambda message: chatbox.send_message(message, source="performance"),
+)
+weather = WeatherManager(
+    state,
+    lambda message: chatbox.send_message(
+        message,
+        source="weather",
+        repeat_in_batch=False,
+    ),
 )
 dglab = DGLabManager(state)
 vrchat_osc = VRChatOSCManager(state, dglab, chatbox)
@@ -189,6 +198,21 @@ class PerformanceConfigPayload(BaseModel):
     show_frame_ms: bool = True
 
 
+class WeatherConfigPayload(BaseModel):
+    enabled: bool = False
+    interval: float = 600.0
+
+
+class WeatherLocationPayload(BaseModel):
+    latitude: float
+    longitude: float
+    accuracy: Optional[float] = None
+
+
+class WeatherCityPayload(BaseModel):
+    city: str
+
+
 class OSCStartPayload(BaseModel):
     host: str = "127.0.0.1"
     port: int = 9001
@@ -224,6 +248,7 @@ async def startup() -> None:
     chatbox_config = state.snapshot()["chatbox"]
     chatbox.configure(chatbox_config["host"], chatbox_config["port"])
     await chatbox.start()
+    await weather.start()
     await performance.start()
     chatbox.refresh_batch_state()
     try:
@@ -248,6 +273,7 @@ async def startup() -> None:
 async def shutdown() -> None:
     vrchat_osc.stop()
     await performance.shutdown()
+    await weather.shutdown()
     await heart_rate.shutdown()
     await chatbox.shutdown()
     await dglab.stop()
@@ -614,6 +640,59 @@ async def grant_performance_capture():
     snapshot = state.snapshot()
     snapshot["result"] = result
     return snapshot
+
+
+@app.post("/api/weather/config")
+async def configure_weather(payload: WeatherConfigPayload):
+    await weather.configure(payload.enabled, payload.interval)
+    snapshot = state.snapshot()["weather"]
+    update_config(
+        "weather",
+        broadcast_enabled=snapshot["broadcast_enabled"],
+        interval=snapshot["interval"],
+    )
+    chatbox.source_changed("weather")
+    return state.snapshot()
+
+
+@app.post("/api/weather/location")
+async def set_weather_location(payload: WeatherLocationPayload):
+    if not await weather.use_browser_location(
+        payload.latitude,
+        payload.longitude,
+        payload.accuracy,
+    ):
+        raise HTTPException(status_code=502, detail=state.snapshot()["weather"]["error"])
+    chatbox.source_changed("weather")
+    return state.snapshot()
+
+
+@app.post("/api/weather/auto-location")
+async def auto_locate_weather():
+    if not await weather.use_ip_location():
+        raise HTTPException(status_code=502, detail=state.snapshot()["weather"]["error"])
+    chatbox.source_changed("weather")
+    return state.snapshot()
+
+
+@app.post("/api/weather/city")
+async def set_weather_city(payload: WeatherCityPayload):
+    try:
+        success = await weather.search_city(payload.city)
+    except WeatherError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not success:
+        raise HTTPException(status_code=502, detail=state.snapshot()["weather"]["error"])
+    chatbox.source_changed("weather")
+    return state.snapshot()
+
+
+@app.post("/api/weather/refresh")
+async def refresh_weather():
+    if not await weather.refresh(auto_locate=False):
+        raise HTTPException(status_code=502, detail=state.snapshot()["weather"]["error"])
+    chatbox.source_changed("weather")
+    return state.snapshot()
 
 
 @app.post("/api/osc/start")

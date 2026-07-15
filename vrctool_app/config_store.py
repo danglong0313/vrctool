@@ -51,6 +51,10 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "show_avg_fps": False,
         "show_frame_ms": True,
     },
+    "weather": {
+        "broadcast_enabled": False,
+        "interval": 600.0,
+    },
     "osc": {
         "listen_host": "127.0.0.1",
         "listen_port": 9001,

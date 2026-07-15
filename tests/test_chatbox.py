@@ -121,6 +121,26 @@ class ChatboxBatchTests(unittest.TestCase):
             ["custom", "device", "custom"],
         )
 
+    def test_weather_update_is_not_replayed_after_its_batch_turn(self) -> None:
+        state, manager, client = self.create_manager()
+        state.patch(
+            "chatbox",
+            batch_enabled=True,
+            custom_enabled=True,
+            custom_message="custom",
+        )
+        state.patch("weather", broadcast_enabled=True, ready=True)
+        manager.send_message("custom", source="custom")
+        manager.send_message("weather", source="weather", repeat_in_batch=False)
+
+        for _ in range(5):
+            manager.send_next_batch()
+
+        payloads = [item[1][0] for item in client.messages]
+        self.assertEqual(payloads.count("weather"), 1)
+        self.assertEqual(payloads.count("custom"), 4)
+        self.assertNotIn("weather", manager._batch_messages)
+
 
 class ChatboxBatchLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def test_shutdown_cleans_batch_scheduler_task(self) -> None:

@@ -8,6 +8,7 @@ let releaseNotesModalOpen = false;
 let releaseNotesHandledThisSession = false;
 let releaseNotesClosing = false;
 let performanceGrantPending = false;
+let weatherLocationRequested = false;
 const debounceTimers = new Map();
 const batchSourceLabels = {
   custom: "自定义文字",
@@ -15,6 +16,7 @@ const batchSourceLabels = {
   afk: "挂机计时",
   heart_rate: "心率",
   performance: "游戏帧率",
+  weather: "天气",
   dglab: "郊狼状态",
 };
 const sectionTitles = {
@@ -22,6 +24,7 @@ const sectionTitles = {
   chatbox: "ChatBox",
   heart: "心率广播",
   performance: "游戏帧率",
+  weather: "天气",
   dglab: "郊狼控制",
   osc: "OSC 映射",
   logs: "日志",
@@ -249,6 +252,9 @@ function switchSection(section, updateHash = true) {
   if (updateHash && location.hash.slice(1) !== target) {
     history.replaceState(null, "", `#${target}`);
   }
+  if (target === "weather" && !weatherLocationRequested) {
+    requestWeatherLocation();
+  }
 }
 
 function escapeHtml(value) {
@@ -466,6 +472,104 @@ function renderPerformanceState(performance) {
   }
 }
 
+function weatherMetric(value, suffix, digits = 1) {
+  if (value === null || value === undefined || value === "") return `--${suffix}`;
+  const number = Number(value);
+  return Number.isFinite(number) ? `${number.toFixed(digits)}${suffix}` : `--${suffix}`;
+}
+
+function renderWeatherState(weather) {
+  const ready = Boolean(weather.ready);
+  const updating = Boolean(weather.updating);
+  const failed = Boolean(weather.error) && !updating;
+  const status = $("weatherStatus");
+  const card = $("weatherCard");
+  const sourceLabels = {
+    browser: "浏览器定位",
+    ip: "IP 估算定位",
+    manual: "手动选择城市",
+  };
+
+  status.textContent = updating ? "正在更新" : weather.status || (ready ? "已更新" : "等待定位");
+  status.classList.toggle("is-good", ready && !updating && !failed);
+  status.classList.toggle("is-warn", updating || (!ready && !failed));
+  status.classList.toggle("is-danger", failed);
+  card.classList.toggle("is-error", failed);
+
+  $("weatherTemperature").textContent = ready
+    ? Number(weather.temperature || 0).toFixed(1)
+    : "--";
+  $("weatherCondition").textContent = weather.condition || "暂无天气数据";
+  $("weatherLocation").textContent = weather.location_name || "尚未定位";
+  const source = sourceLabels[weather.location_source] || "等待自动定位";
+  const accuracy = weather.location_source === "browser" && Number(weather.location_accuracy) > 0
+    ? ` · 约 ${Math.round(Number(weather.location_accuracy))} 米`
+    : "";
+  $("weatherLocationSource").textContent = `${source}${accuracy}`;
+  $("weatherFeelsLike").textContent = weatherMetric(weather.feels_like, "°C");
+  $("weatherHumidity").textContent = weatherMetric(weather.humidity, "%", 0);
+  $("weatherWind").textContent = weatherMetric(weather.wind_speed, " km/h");
+  $("weatherPrecipitation").textContent = weatherMetric(weather.precipitation, " mm");
+  $("weatherLastUpdate").textContent = `最近更新 ${weather.last_update || "-"}`;
+  $("weatherTimezone").textContent = `时区 ${weather.timezone || "-"}`;
+  $("weatherReason").textContent = weather.error
+    || (weather.location_source === "ip"
+      ? "当前使用 IP 估算位置；使用代理时可能不准确，可点“自动定位”重新授权。"
+      : "定位成功，天气数据会按设置的间隔更新。");
+  $("weatherLastSent").textContent = weather.last_sent
+    ? `最近发送 ${weather.last_sent}`
+    : "尚未发送";
+
+  const broadcast = $("weatherBroadcast");
+  broadcast.classList.toggle("is-on", Boolean(weather.broadcast_enabled));
+  broadcast.setAttribute("aria-pressed", String(Boolean(weather.broadcast_enabled)));
+  broadcast.disabled = !weather.available;
+  setValueUnlessFocused("weatherInterval", Number(weather.interval || 600) / 60);
+  $("weatherAutoLocate").disabled = updating;
+  $("weatherRefresh").disabled = updating || !ready;
+  $("weatherSearchCity").disabled = updating;
+  $("weatherPreview").textContent = weather.last_message
+    ? weather.last_message.replaceAll("\n", " · ")
+    : "定位成功后将发送地点、天气、温度、湿度、风速和降水。";
+}
+
+async function requestWeatherLocation(force = false) {
+  if (weatherLocationRequested && !force) return;
+  weatherLocationRequested = true;
+  const status = $("weatherStatus");
+  const reason = $("weatherReason");
+  status.textContent = "正在定位";
+  status.classList.add("is-warn");
+  reason.textContent = "正在请求浏览器位置权限…";
+
+  const useIpFallback = async () => {
+    reason.textContent = "浏览器定位不可用，正在使用 IP 估算位置…";
+    try {
+      await api("/api/weather/auto-location", {});
+    } catch (error) {
+      status.textContent = "定位失败";
+      status.classList.add("is-danger");
+      reason.textContent = error.message || String(error);
+    }
+  };
+
+  if (!navigator.geolocation) {
+    await useIpFallback();
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      api("/api/weather/location", {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+      }).catch(async () => useIpFallback());
+    },
+    () => useIpFallback(),
+    { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 },
+  );
+}
+
 function renderChatboxBatch(chatbox) {
   const enabled = Boolean(chatbox.batch_enabled);
   const running = Boolean(chatbox.batch_running);
@@ -510,6 +614,7 @@ function render(state) {
   const appState = state.app || {};
   const heartRate = state.heart_rate || {};
   const performance = state.performance || {};
+  const weather = state.weather || {};
   const update = state.update || {};
 
   setPill($("oscState"), osc.running, "OSC 运行", "OSC 停止");
@@ -604,6 +709,7 @@ function render(state) {
   renderCustomOscList(osc.custom_mappings);
   renderHeartRateDevices(heartRate);
   renderPerformanceState(performance);
+  renderWeatherState(weather);
   renderUpdateState(update);
 
   $("heartStatus").textContent = heartRate.status || "未连接";
@@ -921,6 +1027,44 @@ function bindEvents() {
       button.disabled = false;
       render(currentState);
     }
+  });
+
+  const showWeatherError = (error) => {
+    $("weatherStatus").textContent = "操作失败";
+    $("weatherStatus").classList.add("is-danger");
+    $("weatherReason").textContent = error.message || String(error);
+  };
+  const weatherIntervalSeconds = () => {
+    const minutes = numericInputValue("weatherInterval") || 10;
+    return minutes * 60;
+  };
+  const saveWeather = (enabled) =>
+    api("/api/weather/config", {
+      enabled,
+      interval: weatherIntervalSeconds(),
+    }).catch(showWeatherError);
+  const searchWeatherCity = () => {
+    const city = $("weatherCity").value.trim();
+    if (!city) return;
+    api("/api/weather/city", { city })
+      .then(() => {
+        $("weatherCity").value = "";
+      })
+      .catch(showWeatherError);
+  };
+  $("weatherBroadcast").addEventListener("click", () =>
+    saveWeather(!currentState?.weather?.broadcast_enabled),
+  );
+  $("saveWeatherSettings").addEventListener("click", () =>
+    saveWeather(Boolean(currentState?.weather?.broadcast_enabled)),
+  );
+  $("weatherAutoLocate").addEventListener("click", () => requestWeatherLocation(true));
+  $("weatherRefresh").addEventListener("click", () =>
+    api("/api/weather/refresh", {}).catch(showWeatherError),
+  );
+  $("weatherSearchCity").addEventListener("click", searchWeatherCity);
+  $("weatherCity").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") searchWeatherCity();
   });
 
   $("toggleDglab").addEventListener("click", () => {

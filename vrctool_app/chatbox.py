@@ -16,6 +16,7 @@ BATCH_SOURCE_ORDER = (
     "afk",
     "heart_rate",
     "performance",
+    "weather",
     "dglab",
 )
 BATCH_SOURCE_LABELS = {
@@ -25,6 +26,7 @@ BATCH_SOURCE_LABELS = {
     "afk": "挂机计时",
     "heart_rate": "心率",
     "performance": "游戏帧率",
+    "weather": "天气",
     "dglab": "郊狼状态",
 }
 
@@ -40,6 +42,7 @@ class ChatboxManager:
         self._batch_task: Optional[asyncio.Task] = None
         self._batch_wakeup = asyncio.Event()
         self._batch_messages: dict[str, str] = {}
+        self._batch_repeat: dict[str, bool] = {}
         self._batch_cursor = 0
         self._afk_started = datetime.now()
 
@@ -62,7 +65,12 @@ class ChatboxManager:
         if self.state.snapshot()["chatbox"].get("batch_enabled", True):
             self._ensure_batch_task()
 
-    def send_message(self, message: str, source: str = "manual") -> bool:
+    def send_message(
+        self,
+        message: str,
+        source: str = "manual",
+        repeat_in_batch: bool = True,
+    ) -> bool:
         message = str(message or "")[:240]
         if not message:
             return False
@@ -71,6 +79,7 @@ class ChatboxManager:
             if source not in active_sources:
                 return False
             self._batch_messages[source] = message
+            self._batch_repeat[source] = bool(repeat_in_batch)
             self.refresh_batch_state(active_sources)
             if (
                 self.state.snapshot()["chatbox"].get("batch_enabled", True)
@@ -79,6 +88,10 @@ class ChatboxManager:
                 self._batch_wakeup.set()
                 return False
         self._send_now(message, source)
+        if source in BATCH_SOURCE_ORDER and not repeat_in_batch:
+            self._batch_messages.pop(source, None)
+            self._batch_repeat.pop(source, None)
+            self.refresh_batch_state()
         return True
 
     def _send_now(self, message: str, source: str) -> None:
@@ -132,6 +145,7 @@ class ChatboxManager:
     def source_changed(self, source: str) -> None:
         if source not in self._active_sources():
             self._batch_messages.pop(source, None)
+            self._batch_repeat.pop(source, None)
         self.refresh_batch_state()
 
     def send_next_batch(self) -> bool:
@@ -147,6 +161,9 @@ class ChatboxManager:
         message = self._batch_messages[source]
         self._batch_cursor = (BATCH_SOURCE_ORDER.index(source) + 1) % len(BATCH_SOURCE_ORDER)
         self._send_now(message, source)
+        if not self._batch_repeat.get(source, True):
+            self._batch_messages.pop(source, None)
+            self._batch_repeat.pop(source, None)
         self.refresh_batch_state(active)
         return True
 
@@ -163,6 +180,7 @@ class ChatboxManager:
         chatbox = snapshot["chatbox"]
         heart_rate = snapshot["heart_rate"]
         performance = snapshot["performance"]
+        weather = snapshot["weather"]
         enabled = {
             "custom": bool(
                 chatbox.get("custom_enabled")
@@ -179,6 +197,10 @@ class ChatboxManager:
                 performance.get("broadcast_enabled")
                 and performance.get("vrchat_running")
                 and performance.get("sampling")
+            ),
+            "weather": bool(
+                weather.get("broadcast_enabled")
+                and weather.get("ready")
             ),
             "dglab": bool(chatbox.get("dglab_enabled")),
         }

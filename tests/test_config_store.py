@@ -22,6 +22,10 @@ class ConfigStoreTests(unittest.TestCase):
             "",
         )
 
+    def test_weather_broadcast_defaults_to_ten_minutes_and_off(self) -> None:
+        self.assertFalse(config_store.DEFAULT_CONFIG["weather"]["broadcast_enabled"])
+        self.assertEqual(config_store.DEFAULT_CONFIG["weather"]["interval"], 600.0)
+
     def test_set_web_port_persists_in_config(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "config.json"

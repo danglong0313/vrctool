@@ -16,7 +16,7 @@
 在项目根目录运行以下 PowerShell 命令，并按发布版本修改 `$version`：
 
 ```powershell
-$version = "2.3.2"
+$version = "2.4.0"
 
 python -c "from pathlib import Path; from PIL import Image; Path('build').mkdir(exist_ok=True); image=Image.open('vrctool_app/assets/logo.png').convert('RGBA'); image.save('build/logo.ico', format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])"
 
@@ -36,19 +36,19 @@ $iscc = @(
 最终输出文件：
 
 ```text
-dist\vrctool-setup-2.3.2.exe
+dist\vrctool-setup-2.4.0.exe
 ```
 
-PyInstaller 生成的目录包仅位于 `build\package\vrctool_v2.3.2`，作为 Inno Setup 的临时输入，不作为发布文件。程序安装后直接从安装目录加载依赖，不会像单文件 EXE 一样每次启动都解压到临时目录。`third_party/presentmon` 会放入目录包的 `_internal` 运行内容中；Inno Setup 还会将 `PresentMon.exe` 安装到 `{app}\tools`，并将 MIT 许可证安装到 `{app}\licenses`，安装版优先使用外层工具目录。
+PyInstaller 生成的目录包仅位于 `build\package\vrctool_v2.4.0`，作为 Inno Setup 的临时输入，不作为发布文件。程序安装后直接从安装目录加载依赖，不会像单文件 EXE 一样每次启动都解压到临时目录。`third_party/presentmon` 会放入目录包的 `_internal` 运行内容中；Inno Setup 还会将 `PresentMon.exe` 安装到 `{app}\tools`，并将 MIT 许可证安装到 `{app}\licenses`，安装版优先使用外层工具目录。
 
 安装器首屏可切换“简体中文”和 English，默认优先使用简体中文。
 
 ## 发布更新
 
 1. 将代码版本号和 `$version` 设为相同值。
-2. 创建格式为 `vrctool_v2.3.2` 的 Git 标签和 GitHub Release。
-3. 上传 `vrctool-setup-2.3.2.exe`。安装版会读取 GitHub Release 的 SHA-256 摘要并校验下载文件。
-4. 只上传 `vrctool-setup-2.3.2.exe`；网页更新和 `vrctool upgrade` 都只下载并运行此安装包。
+2. 创建格式为 `vrctool_v2.4.0` 的 Git 标签和 GitHub Release。
+3. 上传 `vrctool-setup-2.4.0.exe`。安装版会读取 GitHub Release 的 SHA-256 摘要并校验下载文件。
+4. 只上传 `vrctool-setup-2.4.0.exe`；网页更新和 `vrctool upgrade` 都只下载并运行此安装包。
 
 正式公开分发前，建议使用 Authenticode 证书同时签名应用 EXE 和安装包。
 
