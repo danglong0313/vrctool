@@ -74,11 +74,7 @@ performance = PerformanceManager(
 )
 weather = WeatherManager(
     state,
-    lambda message: chatbox.send_message(
-        message,
-        source="weather",
-        repeat_in_batch=False,
-    ),
+    lambda message: chatbox.send_message(message, source="weather"),
 )
 dglab = DGLabManager(state)
 vrchat_osc = VRChatOSCManager(state, dglab, chatbox)

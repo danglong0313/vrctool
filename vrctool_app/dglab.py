@@ -9,9 +9,11 @@ import qrcode
 from pydglab_ws import (
     Channel,
     DGLabWSServer,
+    MessageType,
     RetCode,
     StrengthData,
     StrengthOperationType,
+    WebSocketMessage,
 )
 
 from .state import RuntimeState
@@ -19,6 +21,46 @@ from .waveforms import build_waveform_packet, options
 
 
 CHANNELS = {"A": Channel.A, "B": Channel.B}
+DGLAB_HEARTBEAT_INTERVAL = 10.0
+DGLAB_PING_INTERVAL = 20.0
+DGLAB_PING_TIMEOUT = 60.0
+
+
+class ResilientDGLabWSServer(DGLabWSServer):
+    """Keep the protocol heartbeat alive while WebSocket clients churn."""
+
+    async def _send_heartbeat_cycle(self) -> None:
+        for client_id, websocket in tuple(self._uuid_to_ws.items()):
+            if self._uuid_to_ws.get(client_id) is not websocket:
+                continue
+            try:
+                await self._send(
+                    WebSocketMessage(
+                        type=MessageType.HEARTBEAT,
+                        client_id=client_id,
+                        target_id=self._client_id_to_target_id.get(client_id),
+                        message=RetCode.SUCCESS,
+                    ),
+                    websocket,
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # A single socket can disappear between the snapshot and send.
+                continue
+
+    async def _heartbeat_sender(self) -> None:
+        while True:
+            await self._send_heartbeat_cycle()
+            await asyncio.sleep(float(self._heartbeat_interval or DGLAB_HEARTBEAT_INTERVAL))
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        heartbeat_task = self._heartbeat_task
+        self._heartbeat_task = None
+        if heartbeat_task:
+            heartbeat_task.cancel()
+            await asyncio.gather(heartbeat_task, return_exceptions=True)
+        await self._serve.__aexit__(exc_type, exc_val, exc_tb)
 
 
 def _qr_data_url(text: str) -> str:
@@ -35,6 +77,7 @@ class DGLabManager:
         self.server: Optional[DGLabWSServer] = None
         self.client = None
         self._tasks: list[asyncio.Task] = []
+        self._connection_ids: set[object] = set()
         self._lock = asyncio.Lock()
         self._running = False
         self._fire_origin = {"A": 0, "B": 0}
@@ -43,10 +86,18 @@ class DGLabManager:
     async def start(self, listen_host: str, advertise_host: str, port: int) -> Dict[str, str]:
         async with self._lock:
             await self._stop_unlocked()
-            self.server = DGLabWSServer(listen_host, port, heartbeat_interval=10)
+            self.server = ResilientDGLabWSServer(
+                listen_host,
+                port,
+                heartbeat_interval=DGLAB_HEARTBEAT_INTERVAL,
+                ping_interval=DGLAB_PING_INTERVAL,
+                ping_timeout=DGLAB_PING_TIMEOUT,
+                close_timeout=5.0,
+            )
             self.client = self.server.new_local_client()
             self.server.add_connection_callback("new_connect", self._on_connect)
             self.server.add_connection_callback("disconnect", self._on_disconnect)
+            self._connection_ids.clear()
             await self.server.__aenter__()
 
             self._running = True
@@ -80,7 +131,13 @@ class DGLabManager:
 
     async def _stop_unlocked(self) -> None:
         if self.client and self.client.target_id:
-            await self._zero_strength(clear_pulses=True)
+            try:
+                await asyncio.wait_for(
+                    self._zero_strength(clear_pulses=True),
+                    timeout=2.0,
+                )
+            except Exception as exc:
+                self.state.log("warn", f"DG-LAB 断开前归零失败，继续关闭连接：{exc}")
 
         self._running = False
         for task in self._tasks:
@@ -102,6 +159,7 @@ class DGLabManager:
 
         self.server = None
         self.client = None
+        self._connection_ids.clear()
         self.state.patch(
             "dglab",
             running=False,
@@ -115,15 +173,30 @@ class DGLabManager:
             strength_b=0,
         )
 
-    def _on_connect(self, _uuid, _websocket) -> None:
-        snapshot = self.state.snapshot()["dglab"]
-        self.state.patch("dglab", app_connections=int(snapshot["app_connections"]) + 1)
+    def _on_connect(self, connection_id, _websocket) -> None:
+        self._connection_ids.add(connection_id)
+        self.state.patch("dglab", app_connections=len(self._connection_ids))
         self.state.log("info", "DG-LAB App 已连接 WebSocket，等待设备连接")
 
-    def _on_disconnect(self, _uuid, _websocket) -> None:
-        snapshot = self.state.snapshot()["dglab"]
-        self.state.patch("dglab", app_connections=max(0, int(snapshot["app_connections"]) - 1))
+    def _on_disconnect(self, connection_id, _websocket) -> None:
+        self._connection_ids.discard(connection_id)
+        dglab = self.state.snapshot()["dglab"]
+        if str(connection_id) == str(dglab.get("target_id") or ""):
+            self._mark_unbound()
+        self.state.patch("dglab", app_connections=len(self._connection_ids))
         self.state.log("warn", "DG-LAB App WebSocket 已断开")
+
+    def _mark_unbound(self) -> None:
+        if self.client is not None:
+            self.client._target_id = None
+        self.state.patch(
+            "dglab",
+            bound=False,
+            target_id="",
+            strength_a=0,
+            strength_b=0,
+            fire_active=False,
+        )
 
     def _is_bound(self) -> bool:
         return bool(self.client and not self.client.not_bind)
@@ -155,8 +228,7 @@ class DGLabManager:
                             safety_limit_b=min(int(snapshot["safety_limit_b"]), data.b_limit),
                         )
                     elif data == RetCode.CLIENT_DISCONNECTED:
-                        self.client._target_id = None
-                        self.state.patch("dglab", bound=False, target_id="")
+                        self._mark_unbound()
                         self.state.log("warn", "DG-LAB App 已断开连接")
             except asyncio.CancelledError:
                 raise

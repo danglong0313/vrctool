@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 python-osc
-pydglab-ws
+pydglab-ws==1.1.0
 psutil
 py-cpuinfo
 GPUtil

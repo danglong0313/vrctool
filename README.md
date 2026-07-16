@@ -31,6 +31,16 @@
 - 控制台式网页界面：左侧分区导航和基础设置弹窗，右侧任务工作区，支持浅色/深色主题切换。
 - 郊狼强度环形可视化，会随 A/B 通道强度实时变化。
 
+## v2.4.3 更新内容
+
+- 这是 v2.4.2 的后续稳定性补丁。
+- 天气广播会保留最新消息并持续加入 ChatBox 批量轮播，下一次天气更新会自动替换旧内容。
+- 修复 DG-LAB 连接变化时第三方心跳任务可能退出，导致重连后断线越来越频繁的问题。
+- DG-LAB 心跳发送改为连接快照处理，单个连接失败不会终止整个心跳循环。
+- 服务停止或重新连接时会等待旧心跳任务完整退出，并提高短暂网络抖动的容忍度。
+- 郊狼 App 断线后立即清理旧绑定、连接计数和强度状态，等待 App 干净地重新绑定。
+- 新增天气持续轮播、心跳异常、连接变化、重复重连和资源清理测试。
+
 ## v2.4.2 更新内容
 
 - 这是 v2.4.1 的后续补丁更新，修复中国大陆网络访问天气服务时可能返回 403 的问题。
@@ -74,11 +84,11 @@
 
 | 文件名                      | 用途                                                             |
 | --------------------------- | ---------------------------------------------------------------- |
-| `vrctool-setup-2.4.2.exe` | 安装包，会创建安装记录、快捷方式并配置命令行。 |
+| `vrctool-setup-2.4.3.exe` | 安装包，会创建安装记录、快捷方式并配置命令行。 |
 
 安装步骤：
 
-1. 从 [GitHub Releases](https://github.com/danglong0313/vrctool/releases) 下载 `vrctool-setup-2.4.2.exe`。
+1. 从 [GitHub Releases](https://github.com/danglong0313/vrctool/releases) 下载 `vrctool-setup-2.4.3.exe`。
 2. 双击安装包；首屏可在“简体中文”和 English 之间切换。
 3. 按照提示完成安装，不需要管理员权限。
 4. 从开始菜单或桌面快捷方式启动 vrctool。
@@ -234,7 +244,7 @@ ChatBox 默认发送到：
 
 未开启或暂时没有有效内容的项目会自动跳过，同一项目尚未发送的旧内容会被最新状态替换。网页可调整全局“每项间隔”，并查看当前发送项和下一项。关闭批量轮播后，各功能恢复独立发送。
 
-天气消息采用一次性入队：每次天气更新只加入一条新消息，轮到天气后即从待发送队列移除，不会在 3 秒轮播中反复发送旧天气。
+天气广播会在每次更新后替换轮播中的天气内容，并保留最新一条消息持续参与轮播；关闭天气广播后会立即从轮播中移除。
 
 ## DG-LAB 连接
 
@@ -284,7 +294,7 @@ FPS: 72.3 | Frame: 13.9ms
 3. 若拒绝授权或浏览器定位不可用，vrctool 会自动改用 IP 估算位置。也可以在输入框中搜索城市手动修正。
 4. 确认页面中的位置和天气后，打开 `ChatBox 广播` 并设置更新间隔。
 
-天气广播默认关闭，默认间隔为 10 分钟，可在 5 到 60 分钟之间调整。启用后会立即更新并发送一次，之后按设置间隔重新获取天气。与其他广播同时开启时，新天气会进入 ChatBox 批量轮播，发送一次后等待下一次天气更新。
+天气广播默认关闭，默认间隔为 10 分钟，可在 5 到 60 分钟之间调整。启用后会立即更新并发送一次，之后按设置间隔重新获取天气。与其他广播同时开启时，最新天气会持续参与 ChatBox 批量轮播，并在下一次天气更新后自动替换。
 
 天气主数据源为 [Open-Meteo](https://open-meteo.com/)。国内网络出现 `403`、超时或无效响应时，程序会自动切换到 [UAPI 国内备用天气源](https://uapis.cn/docs/api-reference/get-misc-weather)；国内 IP 定位和省/市/区县解析也优先使用 UAPI 的国内接口，失败后再回退到 [ipapi](https://ipapi.co/) 和 [OpenStreetMap Nominatim](https://nominatim.org/release-docs/develop/api/Reverse/)。这些默认接口均不需要用户填写 API Key，也可通过 `VRCTOOL_DOMESTIC_WEATHER_URL`、`VRCTOOL_DOMESTIC_DISTRICT_URL`、`VRCTOOL_DOMESTIC_IP_LOCATION_URL` 和 `VRCTOOL_REVERSE_GEOCODING_URL` 环境变量替换为自建镜像。
 
@@ -326,7 +336,7 @@ config.json
 需要打包时按照 [packaging/README.md](packaging/README.md) 执行一次性 PyInstaller 和 Inno Setup 命令，最终只输出安装包：
 
 ```text
-dist\vrctool-setup-2.4.2.exe
+dist\vrctool-setup-2.4.3.exe
 ```
 
 目录包中的 `_internal` 是安装器的临时构建内容，不单独发布；安装器会自动将其放入默认程序目录。应用内更新只下载并运行 `setup` 安装包，更新时会替换旧 `_internal` 内容，用户配置仍保存在 `%LOCALAPPDATA%\vrctool\config.json`。安装器首屏支持“简体中文”和 English 切换。

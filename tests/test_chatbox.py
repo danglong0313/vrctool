@@ -121,7 +121,7 @@ class ChatboxBatchTests(unittest.TestCase):
             ["custom", "device", "custom"],
         )
 
-    def test_weather_update_is_not_replayed_after_its_batch_turn(self) -> None:
+    def test_weather_remains_in_round_robin_after_its_batch_turn(self) -> None:
         state, manager, client = self.create_manager()
         state.patch(
             "chatbox",
@@ -131,15 +131,14 @@ class ChatboxBatchTests(unittest.TestCase):
         )
         state.patch("weather", broadcast_enabled=True, ready=True)
         manager.send_message("custom", source="custom")
-        manager.send_message("weather", source="weather", repeat_in_batch=False)
+        manager.send_message("weather", source="weather")
 
-        for _ in range(5):
+        for _ in range(6):
             manager.send_next_batch()
 
         payloads = [item[1][0] for item in client.messages]
-        self.assertEqual(payloads.count("weather"), 1)
-        self.assertEqual(payloads.count("custom"), 4)
-        self.assertNotIn("weather", manager._batch_messages)
+        self.assertEqual(payloads, ["custom", "weather"] * 3)
+        self.assertEqual(manager._batch_messages["weather"], "weather")
 
 
 class ChatboxBatchLifecycleTests(unittest.IsolatedAsyncioTestCase):
