@@ -16,6 +16,7 @@ const batchSourceLabels = {
   afk: "挂机计时",
   heart_rate: "心率",
   performance: "游戏帧率",
+  now_playing: "正在播放",
   weather: "天气",
   dglab: "郊狼状态",
 };
@@ -24,6 +25,7 @@ const sectionTitles = {
   chatbox: "ChatBox",
   heart: "心率广播",
   performance: "游戏帧率",
+  "now-playing": "正在播放",
   weather: "天气",
   dglab: "郊狼控制",
   osc: "OSC 映射",
@@ -478,6 +480,111 @@ function weatherMetric(value, suffix, digits = 1) {
   return Number.isFinite(number) ? `${number.toFixed(digits)}${suffix}` : `--${suffix}`;
 }
 
+function playbackTime(seconds) {
+  const numeric = Number(seconds);
+  const totalSeconds = Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
+  if (hours) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+  }
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
+}
+
+function nowPlayingProgressLine(positionSeconds, durationSeconds) {
+  const duration = Number(durationSeconds);
+  const rawPosition = Number(positionSeconds);
+  if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(rawPosition)) return "";
+  const position = Math.max(0, Math.min(rawPosition, duration));
+  const segments = 6;
+  const marker = Math.min(segments, Math.floor((position / duration) * segments));
+  const bar = `${"-".repeat(marker)}>${"-".repeat(segments - marker)}`;
+  return `${playbackTime(position)} ${bar} ${playbackTime(duration)}`;
+}
+
+function renderNowPlayingState(nowPlaying) {
+  const available = Boolean(nowPlaying.available);
+  const ready = Boolean(nowPlaying.ready && nowPlaying.title);
+  const playing = Boolean(nowPlaying.playing && ready);
+  const failed = Boolean(nowPlaying.error);
+  const card = $("nowPlayingCard");
+  const status = $("nowPlayingStatus");
+  const broadcast = $("nowPlayingBroadcast");
+
+  status.textContent = nowPlaying.status || (playing ? "正在播放" : "等待播放");
+  status.classList.toggle("is-good", playing);
+  status.classList.toggle("is-warn", !playing && !failed);
+  status.classList.toggle("is-danger", failed);
+  card.classList.toggle("is-playing", playing);
+  card.classList.toggle("is-error", failed);
+  $("nowPlayingDisc").classList.toggle("is-spinning", playing);
+
+  $("nowPlayingPlayer").textContent = nowPlaying.player_name || "QQ 音乐 / 网易云音乐";
+  $("nowPlayingTitle").textContent = ready ? nowPlaying.title : "还没有检测到歌曲";
+  $("nowPlayingArtist").textContent = ready
+    ? nowPlaying.artist || "未知歌手"
+    : "启动播放器并开始播放即可自动识别";
+  $("nowPlayingAlbum").textContent = nowPlaying.album || "-";
+  $("nowPlayingSession").textContent = nowPlaying.source_id || "-";
+  $("nowPlayingSession").title = nowPlaying.source_id || "";
+  const progressLine = nowPlayingProgressLine(
+    nowPlaying.position_seconds,
+    nowPlaying.duration_seconds,
+  );
+  const progressUnavailable = nowPlaying.player === "netease"
+    ? "网易云音乐官方客户端不支持返回进度；QQ 音乐可以显示"
+    : "播放器暂未提供进度";
+  $("nowPlayingProgress").textContent = progressLine || (ready ? progressUnavailable : "等待播放器进度");
+  $("nowPlayingProgress").classList.toggle("is-unavailable", !progressLine);
+  $("nowPlayingLastUpdate").textContent = `最近检测 ${nowPlaying.last_update || "-"}`;
+  $("nowPlayingLastSent").textContent = nowPlaying.last_sent
+    ? `最近发送 ${nowPlaying.last_sent}`
+    : "尚未发送";
+  $("nowPlayingReason").textContent = nowPlaying.reason || "等待 Windows 媒体会话";
+
+  broadcast.classList.toggle("is-on", Boolean(nowPlaying.broadcast_enabled));
+  broadcast.setAttribute("aria-pressed", String(Boolean(nowPlaying.broadcast_enabled)));
+  broadcast.disabled = !available;
+  setValueUnlessFocused("nowPlayingPreferredPlayer", nowPlaying.preferred_player || "auto");
+  setValueUnlessFocused("nowPlayingInterval", nowPlaying.interval || 5);
+
+  const setContentToggle = (id, enabled) => {
+    const button = $(id);
+    button.classList.toggle("is-on", Boolean(enabled));
+    button.setAttribute("aria-pressed", String(Boolean(enabled)));
+  };
+  const showTitle = nowPlaying.show_title !== false;
+  const showArtist = nowPlaying.show_artist !== false;
+  const showAlbum = Boolean(nowPlaying.show_album);
+  const showPlayer = Boolean(nowPlaying.show_player);
+  const showProgress = nowPlaying.show_progress !== false;
+  setContentToggle("nowPlayingShowTitle", showTitle);
+  setContentToggle("nowPlayingShowArtist", showArtist);
+  setContentToggle("nowPlayingShowAlbum", showAlbum);
+  setContentToggle("nowPlayingShowPlayer", showPlayer);
+  setContentToggle("nowPlayingShowProgress", showProgress);
+
+  const previewParts = [];
+  if (showTitle) previewParts.push(`♪ ${nowPlaying.title || "歌名"}`);
+  if (showArtist && (!ready || nowPlaying.artist)) {
+    previewParts.push(`歌手: ${nowPlaying.artist || "歌手"}`);
+  }
+  if (showAlbum && (!ready || nowPlaying.album)) {
+    previewParts.push(`专辑: ${nowPlaying.album || "专辑"}`);
+  }
+  if (showPlayer && (!ready || nowPlaying.player_name)) {
+    previewParts.push(`播放器: ${nowPlaying.player_name || "播放器"}`);
+  }
+  const previewProgress = showProgress ? progressLine : "";
+  const firstLine = previewParts.length ? `正在播放: ${previewParts.join(" | ")}` : "正在播放:";
+  $("nowPlayingPreview").textContent = previewParts.length || previewProgress
+    ? `${firstLine}${previewProgress ? `\n${previewProgress}` : ""}`
+    : showTitle || showArtist || showAlbum || showPlayer || showProgress
+      ? "所选广播内容暂无可用信息"
+      : "请至少选择一项广播内容";
+}
+
 function renderWeatherState(weather) {
   const ready = Boolean(weather.ready);
   const updating = Boolean(weather.updating);
@@ -620,6 +727,7 @@ function render(state) {
   const appState = state.app || {};
   const heartRate = state.heart_rate || {};
   const performance = state.performance || {};
+  const nowPlaying = state.now_playing || {};
   const weather = state.weather || {};
   const update = state.update || {};
 
@@ -715,6 +823,7 @@ function render(state) {
   renderCustomOscList(osc.custom_mappings);
   renderHeartRateDevices(heartRate);
   renderPerformanceState(performance);
+  renderNowPlayingState(nowPlaying);
   renderWeatherState(weather);
   renderUpdateState(update);
 
@@ -1033,6 +1142,55 @@ function bindEvents() {
       button.disabled = false;
       render(currentState);
     }
+  });
+
+  const showNowPlayingError = (error) => {
+    $("nowPlayingStatus").textContent = "设置失败";
+    $("nowPlayingStatus").classList.add("is-danger");
+    $("nowPlayingReason").textContent = error.message || String(error);
+  };
+  const nowPlayingPayload = (enabled) => ({
+    enabled,
+    interval: numericInputValue("nowPlayingInterval") || 5,
+    preferred_player: $("nowPlayingPreferredPlayer").value || "auto",
+    show_title: metricEnabled("nowPlayingShowTitle"),
+    show_artist: metricEnabled("nowPlayingShowArtist"),
+    show_album: metricEnabled("nowPlayingShowAlbum"),
+    show_player: metricEnabled("nowPlayingShowPlayer"),
+    show_progress: metricEnabled("nowPlayingShowProgress"),
+  });
+  const saveNowPlaying = (enabled) =>
+    api("/api/now-playing/config", nowPlayingPayload(enabled)).catch(showNowPlayingError);
+  $("nowPlayingBroadcast").addEventListener("click", () =>
+    saveNowPlaying(!currentState?.now_playing?.broadcast_enabled),
+  );
+  $("saveNowPlayingSettings").addEventListener("click", () =>
+    saveNowPlaying(Boolean(currentState?.now_playing?.broadcast_enabled)),
+  );
+  $("refreshNowPlaying").addEventListener("click", () =>
+    api("/api/now-playing/refresh", {}).catch(showNowPlayingError),
+  );
+  const nowPlayingContentIds = [
+    "nowPlayingShowTitle",
+    "nowPlayingShowArtist",
+    "nowPlayingShowAlbum",
+    "nowPlayingShowPlayer",
+    "nowPlayingShowProgress",
+  ];
+  nowPlayingContentIds.forEach((id) => {
+    $(id).addEventListener("click", () => {
+      const button = $(id);
+      const nextEnabled = !button.classList.contains("is-on");
+      button.classList.toggle("is-on", nextEnabled);
+      button.setAttribute("aria-pressed", String(nextEnabled));
+      if (!nowPlayingContentIds.some((toggleId) => metricEnabled(toggleId))) {
+        button.classList.add("is-on");
+        button.setAttribute("aria-pressed", "true");
+        $("nowPlayingReason").textContent = "请至少保留一项广播内容";
+        return;
+      }
+      saveNowPlaying(Boolean(currentState?.now_playing?.broadcast_enabled));
+    });
   });
 
   const showWeatherError = (error) => {

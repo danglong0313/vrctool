@@ -17,6 +17,7 @@ hiddenimports = (
     + collect_submodules("pydglab_ws")
     + collect_submodules("pythonosc")
     + collect_submodules("bleak")
+    + collect_submodules("winrt.windows.media.control")
 )
 
 datas = [

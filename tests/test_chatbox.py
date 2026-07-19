@@ -260,6 +260,37 @@ class ChatboxBatchTests(unittest.TestCase):
         self.assertTrue(all("上海市天气" in payload for payload in payloads))
         self.assertTrue(all("温度 30.0°C" in payload for payload in payloads))
 
+    def test_now_playing_uses_latest_song_metadata_in_rotation(self) -> None:
+        state, manager, client = self.create_manager()
+        state.patch("chatbox", batch_enabled=True)
+        state.patch(
+            "now_playing",
+            available=True,
+            ready=True,
+            playing=True,
+            broadcast_enabled=True,
+            title="第一首",
+            artist="歌手 A",
+            player_name="QQ 音乐",
+            show_title=True,
+            show_artist=True,
+            show_album=False,
+            show_player=False,
+            show_progress=True,
+            position_seconds=10.0,
+            duration_seconds=60.0,
+        )
+        manager.send_message("old", source="now_playing")
+        state.patch("now_playing", title="第二首", artist="歌手 B")
+
+        self.assertTrue(manager.send_next_batch())
+        self.assertEqual(
+            client.messages[0][1][0],
+            "正在播放: ♪ 第二首 | 歌手: 歌手 B\n0:10 ->----- 1:00",
+        )
+        self.assertEqual(state.snapshot()["chatbox"]["last_source"], "now_playing")
+        self.assertTrue(state.snapshot()["now_playing"]["last_sent"])
+
 
 class ChatboxBatchLifecycleTests(unittest.IsolatedAsyncioTestCase):
     async def test_device_is_resampled_repeatedly_during_one_batch_slot(self) -> None:

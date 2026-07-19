@@ -19,6 +19,7 @@ from vrctool_app.dglab import DGLabManager
 from vrctool_app.heartrate import HeartRateManager
 from vrctool_app.lifecycle import request_shutdown
 from vrctool_app.network import get_network_interfaces, is_tcp_port_available, pick_default_lan_ip
+from vrctool_app.now_playing import NowPlayingManager
 from vrctool_app.osc import VRChatOSCManager
 from vrctool_app.performance import PerformanceManager
 from vrctool_app.release_notes import current_release_notes, should_show_release_notes
@@ -35,7 +36,15 @@ app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
 state = RuntimeState()
 config = load_config()
-for config_section in ("chatbox", "dglab", "heart_rate", "performance", "weather", "osc"):
+for config_section in (
+    "chatbox",
+    "dglab",
+    "heart_rate",
+    "performance",
+    "now_playing",
+    "weather",
+    "osc",
+):
     state.patch(config_section, **config.get(config_section, {}))
 configured_web_port = get_configured_web_port(config)
 try:
@@ -71,6 +80,11 @@ heart_rate = HeartRateManager(
 performance = PerformanceManager(
     state,
     lambda message: chatbox.send_message(message, source="performance"),
+)
+now_playing = NowPlayingManager(
+    state,
+    lambda message: chatbox.send_message(message, source="now_playing"),
+    source_changed=lambda: chatbox.source_changed("now_playing"),
 )
 weather = WeatherManager(
     state,
@@ -194,6 +208,17 @@ class PerformanceConfigPayload(BaseModel):
     show_frame_ms: bool = True
 
 
+class NowPlayingConfigPayload(BaseModel):
+    enabled: bool = False
+    interval: float = Field(default=5.0, ge=1.0, le=60.0)
+    preferred_player: str = "auto"
+    show_title: bool = True
+    show_artist: bool = True
+    show_album: bool = False
+    show_player: bool = False
+    show_progress: bool = True
+
+
 class WeatherConfigPayload(BaseModel):
     enabled: bool = False
     interval: float = 600.0
@@ -246,6 +271,7 @@ async def startup() -> None:
     await chatbox.start()
     await weather.start()
     await performance.start()
+    await now_playing.start()
     chatbox.refresh_batch_state()
     try:
         osc_config = state.snapshot()["osc"]
@@ -268,6 +294,7 @@ async def startup() -> None:
 @app.on_event("shutdown")
 async def shutdown() -> None:
     vrchat_osc.stop()
+    await now_playing.shutdown()
     await performance.shutdown()
     await weather.shutdown()
     await heart_rate.shutdown()
@@ -636,6 +663,46 @@ async def grant_performance_capture():
     snapshot = state.snapshot()
     snapshot["result"] = result
     return snapshot
+
+
+@app.post("/api/now-playing/config")
+async def configure_now_playing(payload: NowPlayingConfigPayload):
+    try:
+        await now_playing.configure(
+            payload.enabled,
+            payload.interval,
+            payload.preferred_player,
+            payload.show_title,
+            payload.show_artist,
+            payload.show_album,
+            payload.show_player,
+            payload.show_progress,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    snapshot = state.snapshot()["now_playing"]
+    now_playing_config = config.setdefault("now_playing", {})
+    now_playing_config.pop("template", None)
+    now_playing_config.update(
+        broadcast_enabled=snapshot["broadcast_enabled"],
+        interval=snapshot["interval"],
+        preferred_player=snapshot["preferred_player"],
+        show_title=snapshot["show_title"],
+        show_artist=snapshot["show_artist"],
+        show_album=snapshot["show_album"],
+        show_player=snapshot["show_player"],
+        show_progress=snapshot["show_progress"],
+    )
+    save_config(config)
+    chatbox.source_changed("now_playing")
+    return state.snapshot()
+
+
+@app.post("/api/now-playing/refresh")
+async def refresh_now_playing():
+    await now_playing.refresh()
+    chatbox.source_changed("now_playing")
+    return state.snapshot()
 
 
 @app.post("/api/weather/config")

@@ -9,4 +9,5 @@ WMI; sys_platform == "win32"
 qrcode[pil]
 pyinstaller
 bleak
+winrt-Windows.Media.Control==3.2.1; sys_platform == "win32"
 packaging

@@ -6,9 +6,9 @@
     <title>vrctool</title>
     <link rel="icon" type="image/png" href="/logo.png?v=20260714-favicon-1" />
     <meta http-equiv="Cache-Control" content="no-store" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260719-v244-1" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260719-v250-1" />
     <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-    <script defer src="/static/app.js?v=20260719-v244-1"></script>
+    <script defer src="/static/app.js?v=20260719-v250-1"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -35,6 +35,10 @@
           <button class="nav-item" type="button" data-section="performance">
             <i data-lucide="gauge"></i>
             游戏帧率
+          </button>
+          <button class="nav-item" type="button" data-section="now-playing">
+            <i data-lucide="music-2"></i>
+            正在播放
           </button>
           <button class="nav-item" type="button" data-section="weather">
             <i data-lucide="cloud-sun"></i>
@@ -71,7 +75,7 @@
         <section class="side-card update-card" id="updateCard" aria-labelledby="updateCardTitle">
           <div class="side-card-head">
             <span id="updateCardTitle">应用更新</span>
-            <span class="version-badge" id="currentVersion">v2.4.4</span>
+            <span class="version-badge" id="currentVersion">v2.5.0</span>
           </div>
           <div class="update-summary">
             <strong id="updateTitle">等待检查</strong>
@@ -416,6 +420,123 @@
           </div>
         </section>
 
+        <section class="section-page" data-page="now-playing">
+          <div class="panel-grid two now-playing-layout">
+            <section class="task-card now-playing-card" id="nowPlayingCard">
+              <div class="panel-head">
+                <h3>正在播放</h3>
+                <span class="chip is-warn" id="nowPlayingStatus">等待播放</span>
+              </div>
+              <div class="now-playing-hero">
+                <div class="now-playing-disc" id="nowPlayingDisc" aria-hidden="true">
+                  <span></span>
+                </div>
+                <div class="now-playing-copy">
+                  <span id="nowPlayingPlayer">QQ 音乐 / 网易云音乐</span>
+                  <strong id="nowPlayingTitle">还没有检测到歌曲</strong>
+                  <p id="nowPlayingArtist">启动播放器并开始播放即可自动识别</p>
+                </div>
+              </div>
+              <div class="now-playing-meta">
+                <div>
+                  <span>专辑</span>
+                  <strong id="nowPlayingAlbum">-</strong>
+                </div>
+                <div>
+                  <span>媒体会话</span>
+                  <strong id="nowPlayingSession">-</strong>
+                </div>
+                <div class="now-playing-progress-row">
+                  <span>播放进度</span>
+                  <strong id="nowPlayingProgress">等待播放器进度</strong>
+                </div>
+              </div>
+              <div class="performance-meta">
+                <span id="nowPlayingLastUpdate">最近检测 -</span>
+                <span id="nowPlayingLastSent">尚未发送</span>
+              </div>
+              <p class="performance-reason" id="nowPlayingReason">
+                请先在 QQ 音乐或网易云音乐中开始播放歌曲。
+              </p>
+            </section>
+
+            <section class="task-card now-playing-settings">
+              <div class="panel-head">
+                <h3>识别与广播</h3>
+                <button class="ghost compact-button" id="refreshNowPlaying" type="button">
+                  <i data-lucide="refresh-cw"></i>
+                  立即检测
+                </button>
+              </div>
+              <label>
+                <span>优先播放器</span>
+                <select id="nowPlayingPreferredPlayer">
+                  <option value="auto">自动选择正在播放的应用</option>
+                  <option value="qqmusic">只使用 QQ 音乐</option>
+                  <option value="netease">只使用网易云音乐</option>
+                </select>
+              </label>
+              <div class="toggle-row">
+                <span>ChatBox 广播</span>
+                <button
+                  class="switch"
+                  id="nowPlayingBroadcast"
+                  type="button"
+                  aria-label="切换正在播放 ChatBox 广播"
+                  aria-pressed="false"
+                ></button>
+              </div>
+              <label>
+                <span>发送间隔（秒）</span>
+                <input id="nowPlayingInterval" type="number" min="1" max="60" step="1" value="5" />
+              </label>
+              <div class="field-block">
+                <span>广播内容</span>
+                <div class="metric-toggles now-playing-content-toggles">
+                  <button
+                    class="metric-toggle is-on"
+                    id="nowPlayingShowTitle"
+                    type="button"
+                    aria-pressed="true"
+                  >歌名</button>
+                  <button
+                    class="metric-toggle is-on"
+                    id="nowPlayingShowArtist"
+                    type="button"
+                    aria-pressed="true"
+                  >歌手</button>
+                  <button
+                    class="metric-toggle"
+                    id="nowPlayingShowAlbum"
+                    type="button"
+                    aria-pressed="false"
+                  >专辑</button>
+                  <button
+                    class="metric-toggle"
+                    id="nowPlayingShowPlayer"
+                    type="button"
+                    aria-pressed="false"
+                  >播放器</button>
+                  <button
+                    class="metric-toggle is-on"
+                    id="nowPlayingShowProgress"
+                    type="button"
+                    aria-pressed="true"
+                  >进度</button>
+                </div>
+              </div>
+              <p class="mini now-playing-preview" id="nowPlayingPreview">正在播放: ♪ 歌名 | 歌手: 歌手</p>
+              <p class="mini now-playing-privacy">
+                歌名属于个人播放信息，只有主动开启广播后才会发送到 VRChat。
+              </p>
+              <button class="primary" id="saveNowPlayingSettings" type="button">
+                <i data-lucide="save"></i>
+                应用设置
+              </button>
+            </section>
+          </div>
+        </section>
+
         <section class="section-page" data-page="weather">
           <div class="panel-grid two weather-layout">
             <section class="task-card weather-card" id="weatherCard">
@@ -752,7 +873,7 @@
             </div>
           </div>
           <div class="release-notes-head-actions">
-            <span class="version-badge" id="releaseNotesVersion">v2.4.4</span>
+            <span class="version-badge" id="releaseNotesVersion">v2.5.0</span>
             <button class="icon-button ghost" id="dismissReleaseNotesModal" type="button" title="关闭">
               <i data-lucide="x"></i>
             </button>

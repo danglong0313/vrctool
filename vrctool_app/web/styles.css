@@ -735,6 +735,169 @@ h3 {
   color: var(--text);
 }
 
+.now-playing-layout {
+  align-items: stretch;
+}
+
+.now-playing-card {
+  overflow: hidden;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.now-playing-card::before {
+  background:
+    radial-gradient(circle at 18% 28%, color-mix(in srgb, var(--accent-2) 21%, transparent), transparent 29%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 52%);
+}
+
+.now-playing-card.is-playing {
+  border-color: color-mix(in srgb, var(--accent-2) 42%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-2) 10%, transparent), var(--soft-shadow);
+}
+
+.now-playing-card.is-error {
+  border-color: color-mix(in srgb, var(--danger) 58%, transparent);
+}
+
+.now-playing-hero {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  min-height: 150px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 16px;
+}
+
+.now-playing-disc {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  border: 1px solid color-mix(in srgb, var(--accent-2) 40%, var(--line));
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, var(--panel) 0 7%, var(--accent-2) 8% 20%, transparent 21%),
+    repeating-radial-gradient(circle, transparent 0 7px, color-mix(in srgb, var(--ink) 10%, transparent) 8px 9px),
+    conic-gradient(from 20deg, color-mix(in srgb, var(--accent) 48%, #111), #14141c 30%, color-mix(in srgb, var(--accent-2) 35%, #111) 62%, #14141c);
+  box-shadow: inset 0 0 18px #0008, 0 14px 28px #0003;
+}
+
+.now-playing-disc::after {
+  content: "";
+  position: absolute;
+  inset: 45%;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--panel) 80%, transparent);
+}
+
+.now-playing-disc.is-spinning {
+  animation: now-playing-spin 5.6s linear infinite;
+}
+
+@keyframes now-playing-spin {
+  to { transform: rotate(360deg); }
+}
+
+.now-playing-copy {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.now-playing-copy > span {
+  color: var(--accent-2);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.now-playing-copy strong {
+  font-size: clamp(24px, 3vw, 38px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.now-playing-copy p {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.now-playing-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.now-playing-meta div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border-left: 2px solid color-mix(in srgb, var(--accent-2) 55%, var(--line));
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  padding: 9px 10px;
+}
+
+.now-playing-meta span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.now-playing-meta strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.now-playing-meta .now-playing-progress-row {
+  grid-column: 1 / -1;
+}
+
+.now-playing-progress-row strong,
+.now-playing-preview {
+  font-family: "Cascadia Mono", "Microsoft YaHei UI", monospace;
+}
+
+.now-playing-progress-row strong.is-unavailable {
+  color: var(--muted);
+  font-family: inherit;
+}
+
+.now-playing-settings {
+  align-content: start;
+}
+
+.compact-button {
+  width: auto;
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.now-playing-content-toggles .metric-toggle {
+  min-width: 92px;
+}
+
+.now-playing-preview,
+.now-playing-privacy {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.now-playing-preview {
+  min-height: 38px;
+  border-left: 2px solid var(--accent-2);
+  padding: 7px 10px;
+  white-space: pre-line;
+}
+
+.now-playing-privacy {
+  color: var(--muted);
+}
+
 .weather-layout {
   align-items: stretch;
 }
@@ -1601,6 +1764,16 @@ input[type="range"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .now-playing-hero,
+  .now-playing-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .now-playing-disc {
+    width: 88px;
+    height: 88px;
+  }
+
   .settings-grid,
   .settings-port-status {
     grid-template-columns: 1fr;
@@ -1634,5 +1807,11 @@ input[type="range"] {
 
   .custom-osc-item .remove-custom-osc {
     grid-column: 3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .now-playing-disc.is-spinning {
+    animation: none;
   }
 }

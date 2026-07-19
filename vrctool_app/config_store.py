@@ -55,6 +55,16 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "broadcast_enabled": False,
         "interval": 600.0,
     },
+    "now_playing": {
+        "broadcast_enabled": False,
+        "interval": 5.0,
+        "preferred_player": "auto",
+        "show_title": True,
+        "show_artist": True,
+        "show_album": False,
+        "show_player": False,
+        "show_progress": True,
+    },
     "osc": {
         "listen_host": "127.0.0.1",
         "listen_port": 9001,
@@ -109,13 +119,29 @@ def load_config() -> Dict[str, Any]:
         loaded = json.loads(source_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return config
+    upgraded = False
     if isinstance(loaded, dict):
         for section, values in loaded.items():
             if isinstance(values, dict) and isinstance(config.get(section), dict):
                 config[section].update(values)
             else:
                 config[section] = values
-    if migrated:
+        legacy_now_playing = loaded.get("now_playing")
+        if isinstance(legacy_now_playing, dict) and "template" in legacy_now_playing:
+            template = str(legacy_now_playing.get("template") or "")
+            selected = {
+                "show_title": "{title}" in template,
+                "show_artist": "{artist}" in template,
+                "show_album": "{album}" in template,
+                "show_player": "{player}" in template,
+            }
+            if not any(selected.values()):
+                selected["show_title"] = True
+            selected["show_progress"] = True
+            config.setdefault("now_playing", {}).update(selected)
+            config["now_playing"].pop("template", None)
+            upgraded = True
+    if migrated or upgraded:
         try:
             save_config(config)
         except OSError:

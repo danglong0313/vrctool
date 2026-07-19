@@ -8,6 +8,7 @@ from pythonosc.udp_client import SimpleUDPClient
 
 from .device_info import format_device_message, get_device_info
 from .heartrate import format_heart_rate_message
+from .now_playing import format_now_playing_message
 from .performance import format_performance_message
 from .state import RuntimeState
 from .weather import format_weather_message
@@ -19,6 +20,7 @@ BATCH_SOURCE_ORDER = (
     "afk",
     "heart_rate",
     "performance",
+    "now_playing",
     "weather",
     "dglab",
 )
@@ -29,6 +31,7 @@ BATCH_SOURCE_LABELS = {
     "afk": "挂机计时",
     "heart_rate": "心率",
     "performance": "游戏帧率",
+    "now_playing": "正在播放",
     "weather": "天气",
     "dglab": "郊狼状态",
 }
@@ -104,6 +107,8 @@ class ChatboxManager:
             last_source=source,
             batch_current_source=source if source in BATCH_SOURCE_ORDER else "",
         )
+        if source == "now_playing":
+            self.state.patch("now_playing", last_sent=datetime.now().strftime("%H:%M:%S"))
         label = BATCH_SOURCE_LABELS.get(source, source)
         self.state.log("ok", f"已发送 ChatBox 消息：{label}")
 
@@ -211,6 +216,8 @@ class ChatboxManager:
                     show_avg_fps=bool(performance.get("show_avg_fps")),
                     show_frame_ms=bool(performance.get("show_frame_ms", True)),
                 )
+            elif source == "now_playing":
+                message = format_now_playing_message(snapshot["now_playing"])
             elif source == "weather":
                 message = format_weather_message(snapshot["weather"])
             elif source == "dglab":
@@ -230,6 +237,7 @@ class ChatboxManager:
         chatbox = snapshot["chatbox"]
         heart_rate = snapshot["heart_rate"]
         performance = snapshot["performance"]
+        now_playing = snapshot["now_playing"]
         weather = snapshot["weather"]
         enabled = {
             "custom": bool(
@@ -248,6 +256,12 @@ class ChatboxManager:
                 and performance.get("vrchat_running")
                 and performance.get("sampling")
                 and float(performance.get("fps") or 0.0) > 0
+            ),
+            "now_playing": bool(
+                now_playing.get("broadcast_enabled")
+                and now_playing.get("available")
+                and now_playing.get("playing")
+                and str(now_playing.get("title") or "").strip()
             ),
             "weather": bool(
                 weather.get("broadcast_enabled")
@@ -268,6 +282,7 @@ class ChatboxManager:
             "afk": chatbox.get("afk_interval"),
             "heart_rate": snapshot["heart_rate"].get("interval"),
             "performance": snapshot["performance"].get("interval"),
+            "now_playing": snapshot["now_playing"].get("interval"),
             "weather": snapshot["weather"].get("interval"),
             "dglab": chatbox.get("dglab_interval"),
         }

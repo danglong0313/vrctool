@@ -26,6 +26,42 @@ class ConfigStoreTests(unittest.TestCase):
         self.assertFalse(config_store.DEFAULT_CONFIG["weather"]["broadcast_enabled"])
         self.assertEqual(config_store.DEFAULT_CONFIG["weather"]["interval"], 600.0)
 
+    def test_now_playing_defaults_to_auto_selection_and_off(self) -> None:
+        now_playing = config_store.DEFAULT_CONFIG["now_playing"]
+        self.assertFalse(now_playing["broadcast_enabled"])
+        self.assertEqual(now_playing["preferred_player"], "auto")
+        self.assertEqual(now_playing["interval"], 5.0)
+        self.assertTrue(now_playing["show_title"])
+        self.assertTrue(now_playing["show_artist"])
+        self.assertFalse(now_playing["show_album"])
+        self.assertFalse(now_playing["show_player"])
+        self.assertTrue(now_playing["show_progress"])
+
+    def test_legacy_now_playing_template_is_migrated_to_content_switches(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "config.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "now_playing": {
+                            "template": "{player} | {title} - {artist}",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch("vrctool_app.config_store.config_path", return_value=path):
+                loaded = config_store.load_config()
+            persisted = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertTrue(loaded["now_playing"]["show_title"])
+        self.assertTrue(loaded["now_playing"]["show_artist"])
+        self.assertFalse(loaded["now_playing"]["show_album"])
+        self.assertTrue(loaded["now_playing"]["show_player"])
+        self.assertTrue(loaded["now_playing"]["show_progress"])
+        self.assertNotIn("template", loaded["now_playing"])
+        self.assertNotIn("template", persisted["now_playing"])
+
     def test_set_web_port_persists_in_config(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "config.json"
