@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 from urllib.parse import parse_qs, urlparse
+from unittest.mock import AsyncMock, patch
 
 from vrctool_app.state import RuntimeState
 from vrctool_app.weather import (
@@ -384,6 +385,59 @@ class WeatherManagerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(manager._broadcast_task)
         self.assertTrue(task.cancelled())
+
+    async def test_refresh_failure_preserves_last_valid_weather(self) -> None:
+        state, manager, _sent = self.create_manager()
+        state.patch(
+            "weather",
+            ready=True,
+            latitude=31.2304,
+            longitude=121.4737,
+            location_name="上海市黄浦区",
+            temperature=28.4,
+            condition="小雨",
+            last_update="10:00:00",
+            last_message="previous weather",
+        )
+
+        def fail_request(_url: str) -> dict:
+            raise RuntimeError("temporary network failure")
+
+        manager._json_request = fail_request
+        success = await manager.refresh()
+        weather = state.snapshot()["weather"]
+
+        self.assertFalse(success)
+        self.assertTrue(weather["ready"])
+        self.assertEqual(weather["temperature"], 28.4)
+        self.assertEqual(weather["condition"], "小雨")
+        self.assertEqual(weather["last_update"], "10:00:00")
+        self.assertEqual(weather["last_message"], "previous weather")
+        self.assertEqual(weather["status"], "更新失败，继续使用上次数据")
+
+    async def test_broadcast_reuses_valid_weather_after_unexpected_refresh_error(self) -> None:
+        state, manager, sent = self.create_manager()
+        state.patch(
+            "weather",
+            broadcast_enabled=True,
+            ready=True,
+            latitude=31.2304,
+            longitude=121.4737,
+            location_name="上海市黄浦区",
+            temperature=28.4,
+            feels_like=31.2,
+            humidity=72,
+            wind_speed=9.6,
+            precipitation=0.3,
+            condition="小雨",
+        )
+
+        with patch.object(manager, "refresh", new=AsyncMock(side_effect=RuntimeError("boom"))):
+            self.assertTrue(await manager._broadcast_once())
+
+        self.assertEqual(len(sent), 1)
+        self.assertIn("上海市黄浦区天气", sent[0])
+        self.assertIn("温度 28.4°C", sent[0])
 
 
 if __name__ == "__main__":

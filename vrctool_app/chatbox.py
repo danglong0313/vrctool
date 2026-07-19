@@ -7,7 +7,10 @@ from typing import Optional
 from pythonosc.udp_client import SimpleUDPClient
 
 from .device_info import format_device_message, get_device_info
+from .heartrate import format_heart_rate_message
+from .performance import format_performance_message
 from .state import RuntimeState
+from .weather import format_weather_message
 
 
 BATCH_SOURCE_ORDER = (
@@ -81,10 +84,7 @@ class ChatboxManager:
             self._batch_messages[source] = message
             self._batch_repeat[source] = bool(repeat_in_batch)
             self.refresh_batch_state(active_sources)
-            if (
-                self.state.snapshot()["chatbox"].get("batch_enabled", True)
-                and len(active_sources) > 1
-            ):
+            if self.state.snapshot()["chatbox"].get("batch_enabled", True):
                 self._batch_wakeup.set()
                 return False
         self._send_now(message, source)
@@ -117,7 +117,7 @@ class ChatboxManager:
         if enabled:
             self._ensure_batch_task()
             self._batch_wakeup.set()
-            self.state.log("ok", f"ChatBox 批量轮播已开启，每 {interval:g} 秒发送下一项")
+            self.state.log("ok", f"ChatBox 批量轮播已开启，每项停留 {interval:g} 秒")
         else:
             await self._stop_batch_task()
             self.state.patch(
@@ -131,13 +131,18 @@ class ChatboxManager:
 
     def refresh_batch_state(self, active_sources: Optional[list[str]] = None) -> None:
         active = active_sources if active_sources is not None else self._active_sources()
-        enabled = bool(self.state.snapshot()["chatbox"].get("batch_enabled", True))
-        next_source = self._next_available_source(active) if enabled and len(active) > 1 else ""
+        chatbox = self.state.snapshot()["chatbox"]
+        enabled = bool(chatbox.get("batch_enabled", True))
+        current_source = str(chatbox.get("batch_current_source") or "")
+        if not enabled or current_source not in active:
+            current_source = ""
+        next_source = self._next_available_source(active) if enabled and active else ""
         self.state.patch(
             "chatbox",
-            batch_running=enabled and len(active) > 1,
+            batch_running=enabled and bool(active),
             batch_active_sources=active,
             batch_order=list(BATCH_SOURCE_ORDER),
+            batch_current_source=current_source,
             batch_next_source=next_source,
         )
         self._batch_wakeup.set()
@@ -151,29 +156,74 @@ class ChatboxManager:
     def send_next_batch(self) -> bool:
         chatbox = self.state.snapshot()["chatbox"]
         active = self._active_sources()
-        if not chatbox.get("batch_enabled", True) or len(active) < 2:
+        if not chatbox.get("batch_enabled", True) or not active:
             self.refresh_batch_state(active)
             return False
         source = self._next_available_source(active)
         if not source:
             self.refresh_batch_state(active)
             return False
-        message = self._batch_messages[source]
         self._batch_cursor = (BATCH_SOURCE_ORDER.index(source) + 1) % len(BATCH_SOURCE_ORDER)
-        self._send_now(message, source)
-        if not self._batch_repeat.get(source, True):
-            self._batch_messages.pop(source, None)
-            self._batch_repeat.pop(source, None)
+        sent = self._send_batch_source(source)
         self.refresh_batch_state(active)
-        return True
+        return sent
 
     def _next_available_source(self, active_sources: list[str]) -> str:
         for offset in range(len(BATCH_SOURCE_ORDER)):
             index = (self._batch_cursor + offset) % len(BATCH_SOURCE_ORDER)
             source = BATCH_SOURCE_ORDER[index]
-            if source in active_sources and self._batch_messages.get(source):
+            if source in active_sources:
                 return source
         return ""
+
+    def _send_batch_source(self, source: str) -> bool:
+        message = self._render_source_message(source)
+        if not message:
+            self._batch_messages.pop(source, None)
+            self._batch_repeat.pop(source, None)
+            return False
+        self._send_now(message, source)
+        if not self._batch_repeat.get(source, True):
+            self._batch_messages.pop(source, None)
+            self._batch_repeat.pop(source, None)
+        return True
+
+    def _render_source_message(self, source: str) -> str:
+        snapshot = self.state.snapshot()
+        message = ""
+        try:
+            if source == "custom":
+                message = str(snapshot["chatbox"].get("custom_message") or "")
+            elif source == "device":
+                device = get_device_info()
+                self.state.patch("device", **device)
+                message = format_device_message(device)
+            elif source == "afk":
+                message = self._format_afk_message()
+            elif source == "heart_rate":
+                message = format_heart_rate_message(snapshot["heart_rate"])
+            elif source == "performance":
+                performance = snapshot["performance"]
+                message = format_performance_message(
+                    float(performance.get("fps") or 0.0),
+                    float(performance.get("avg_fps") or 0.0),
+                    float(performance.get("frame_ms") or 0.0),
+                    show_avg_fps=bool(performance.get("show_avg_fps")),
+                    show_frame_ms=bool(performance.get("show_frame_ms", True)),
+                )
+            elif source == "weather":
+                message = format_weather_message(snapshot["weather"])
+            elif source == "dglab":
+                message = format_dglab_message(snapshot)
+        except (KeyError, TypeError, ValueError):
+            message = ""
+
+        message = str(message or "").strip()[:240]
+        if not message:
+            message = str(self._batch_messages.get(source) or "").strip()[:240]
+        if message:
+            self._batch_messages[source] = message
+        return message
 
     def _active_sources(self) -> list[str]:
         snapshot = self.state.snapshot()
@@ -197,14 +247,67 @@ class ChatboxManager:
                 performance.get("broadcast_enabled")
                 and performance.get("vrchat_running")
                 and performance.get("sampling")
+                and float(performance.get("fps") or 0.0) > 0
             ),
             "weather": bool(
                 weather.get("broadcast_enabled")
                 and weather.get("ready")
+                and str(weather.get("location_name") or "").strip()
+                and weather.get("temperature") is not None
             ),
             "dglab": bool(chatbox.get("dglab_enabled")),
         }
         return [source for source in BATCH_SOURCE_ORDER if enabled[source]]
+
+    def _source_interval(self, source: str) -> float:
+        snapshot = self.state.snapshot()
+        chatbox = snapshot["chatbox"]
+        intervals = {
+            "custom": chatbox.get("custom_interval"),
+            "device": chatbox.get("device_interval"),
+            "afk": chatbox.get("afk_interval"),
+            "heart_rate": snapshot["heart_rate"].get("interval"),
+            "performance": snapshot["performance"].get("interval"),
+            "weather": snapshot["weather"].get("interval"),
+            "dglab": chatbox.get("dglab_interval"),
+        }
+        try:
+            return max(1.0, float(intervals.get(source) or 1.0))
+        except (TypeError, ValueError):
+            return 1.0
+
+    async def _run_batch_slot(self, source: str) -> bool:
+        loop = asyncio.get_running_loop()
+        started_at = loop.time()
+        next_send_at = started_at
+        sent = False
+
+        while self.state.snapshot()["chatbox"].get("batch_enabled", True):
+            if source not in self._active_sources():
+                break
+
+            try:
+                duration = float(
+                    self.state.snapshot()["chatbox"].get("batch_interval") or 3.0
+                )
+            except (TypeError, ValueError):
+                duration = 3.0
+            deadline = started_at + max(1.0, min(duration, 60.0))
+            now = loop.time()
+            if now >= deadline:
+                break
+
+            if now >= next_send_at:
+                if not self._send_batch_source(source):
+                    break
+                sent = True
+                next_send_at = loop.time() + self._source_interval(source)
+
+            now = loop.time()
+            wait_time = min(0.25, deadline - now, max(0.0, next_send_at - now))
+            await asyncio.sleep(max(0.0, wait_time))
+
+        return sent
 
     def _ensure_batch_task(self) -> None:
         if self._batch_task and not self._batch_task.done():
@@ -225,24 +328,23 @@ class ChatboxManager:
         while self.state.snapshot()["chatbox"].get("batch_enabled", True):
             active = self._active_sources()
             self.refresh_batch_state(active)
-            if len(active) < 2 or not self._next_available_source(active):
+            source = self._next_available_source(active) if active else ""
+            if not source:
                 self._batch_wakeup.clear()
-                try:
-                    await asyncio.wait_for(self._batch_wakeup.wait(), timeout=0.5)
-                except asyncio.TimeoutError:
-                    pass
+                await asyncio.sleep(0.25)
                 continue
+            self._batch_cursor = (BATCH_SOURCE_ORDER.index(source) + 1) % len(
+                BATCH_SOURCE_ORDER
+            )
+            self.state.patch("chatbox", batch_current_source=source)
+            self.refresh_batch_state(active)
             try:
-                self.send_next_batch()
+                await self._run_batch_slot(source)
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
                 self.state.log("err", f"ChatBox 批量轮播发送失败：{exc}")
                 await asyncio.sleep(1)
-                continue
-            interval = max(
-                1.0,
-                float(self.state.snapshot()["chatbox"].get("batch_interval") or 3.0),
-            )
-            await asyncio.sleep(interval)
 
     def set_custom_message(self, message: str, interval: float = 3.0) -> None:
         self.state.patch(
@@ -340,21 +442,23 @@ class ChatboxManager:
 
     async def _afk_loop(self, interval: float) -> None:
         while True:
-            elapsed = int((datetime.now() - self._afk_started).total_seconds())
-            self.state.patch("afk", elapsed_seconds=elapsed)
-            hours, remainder = divmod(elapsed, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            message = (
-                "正在挂机...\n"
-                f"开始: {self._afk_started.strftime('%Y-%m-%d %H:%M:%S')}\n"
-                f"时长: {hours:02d}小时{minutes:02d}分{seconds:02d}秒"
-            )
-            self.send_message(message, source="afk")
+            self.send_message(self._format_afk_message(), source="afk")
             interval = max(
                 1.0,
                 float(self.state.snapshot()["chatbox"].get("afk_interval") or interval),
             )
             await asyncio.sleep(interval)
+
+    def _format_afk_message(self) -> str:
+        elapsed = int((datetime.now() - self._afk_started).total_seconds())
+        self.state.patch("afk", elapsed_seconds=elapsed)
+        hours, remainder = divmod(elapsed, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return (
+            "正在挂机...\n"
+            f"开始: {self._afk_started.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"时长: {hours:02d}小时{minutes:02d}分{seconds:02d}秒"
+        )
 
     async def start_dglab_status(self, interval: float = 1.0) -> None:
         await self.stop_dglab_status()

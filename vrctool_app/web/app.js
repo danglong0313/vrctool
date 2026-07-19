@@ -599,7 +599,7 @@ function renderChatboxBatch(chatbox) {
     ? "已关闭"
     : running
       ? `轮播中 · ${active.length} 项`
-      : "等待多个项目";
+      : "等待广播项目";
   status.classList.toggle("is-good", running);
   status.classList.toggle("is-warn", enabled && !running);
 

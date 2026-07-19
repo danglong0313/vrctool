@@ -24,6 +24,7 @@ DEFAULT_LOW_FPS_THRESHOLD = 45.0
 PRESENTMON_VERSION = "2.4.1"
 AVERAGE_WINDOW_SECONDS = 5.0
 CURRENT_WINDOW_SECONDS = 1.0
+SWAP_CHAIN_RECENCY_SECONDS = 0.5
 SAMPLE_STALE_SECONDS = 3.0
 PROCESS_POLL_SECONDS = 1.0
 RETRY_SECONDS = 5.0
@@ -69,6 +70,8 @@ class PresentSample:
     swap_chain: str
     frame_ms: float
     application: str = ""
+    present_time: Optional[float] = None
+    dropped: bool = False
 
 
 @dataclass(frozen=True)
@@ -139,7 +142,7 @@ def _parse_float(value: str) -> Optional[float]:
 
 
 class PresentMonCsvParser:
-    FRAME_TIME_COLUMNS = ("msbetweenpresents", "frametime", "msbetweenappstart")
+    FRAME_TIME_COLUMNS = ("msbetweenpresents", "msbetweenappstart", "frametime")
 
     def __init__(self) -> None:
         self._columns: Optional[list[str]] = None
@@ -172,11 +175,19 @@ class PresentMonCsvParser:
                 break
         if process_id <= 0 or frame_ms is None or not 0 < frame_ms <= MAX_FRAME_TIME_MS:
             return None
+        present_time = _parse_float(row.get("timeinseconds", ""))
+        dropped = str(row.get("dropped") or "").strip().casefold() in {
+            "1",
+            "true",
+            "yes",
+        }
         return PresentSample(
             process_id=process_id,
             swap_chain=str(row.get("swapchainaddress") or "default").strip() or "default",
             frame_ms=frame_ms,
             application=str(row.get("application") or "").strip(),
+            present_time=present_time,
+            dropped=dropped,
         )
 
 
@@ -189,9 +200,14 @@ class FrameWindow:
         self._samples.clear()
 
     def add(self, sample: PresentSample, observed_at: float) -> FrameMetrics:
+        timeline = (
+            float(sample.present_time)
+            if sample.present_time is not None and sample.present_time >= 0
+            else float(observed_at)
+        )
         chain = self._samples[sample.swap_chain]
-        chain.append((observed_at, sample.frame_ms))
-        return self.metrics(observed_at)
+        chain.append((timeline, sample.frame_ms))
+        return self.metrics(timeline)
 
     def metrics(self, now: float) -> FrameMetrics:
         cutoff = now - self.window_seconds
@@ -206,11 +222,22 @@ class FrameWindow:
         if not self._samples:
             return FrameMetrics(0.0, 0.0, 0.0, "", 0)
 
+        latest_timestamp = max(samples[-1][0] for samples in self._samples.values())
+        active_chains = [
+            item
+            for item in self._samples.items()
+            if latest_timestamp - item[1][-1][0] <= SWAP_CHAIN_RECENCY_SECONDS
+        ]
+        recent_cutoff = latest_timestamp - CURRENT_WINDOW_SECONDS
         address, samples = max(
-            self._samples.items(),
-            key=lambda item: (len(item[1]), item[1][-1][0]),
+            active_chains,
+            key=lambda item: (
+                sum(observed_at >= recent_cutoff for observed_at, _ in item[1]),
+                item[1][-1][0],
+                len(item[1]),
+            ),
         )
-        current_cutoff = now - CURRENT_WINDOW_SECONDS
+        current_cutoff = latest_timestamp - CURRENT_WINDOW_SECONDS
         current_values = [frame_ms for observed_at, frame_ms in samples if observed_at >= current_cutoff]
         if not current_values:
             current_values = [samples[-1][1]]
@@ -274,7 +301,6 @@ class PerformanceManager:
         self._lifecycle_lock = asyncio.Lock()
         self._window = FrameWindow()
         self._last_sample_at = 0.0
-        self._last_state_update = float("-inf")
         self._last_sent_at: Optional[float] = None
         self._retry_at = 0.0
         self._blocked_pid = 0
@@ -643,9 +669,6 @@ class PerformanceManager:
         now = self._clock()
         self._last_sample_at = now
         metrics = self._window.add(sample, now)
-        if now - self._last_state_update < 0.1:
-            return
-        self._last_state_update = now
         threshold = float(
             self.state.snapshot()["performance"].get("low_fps_threshold")
             or DEFAULT_LOW_FPS_THRESHOLD
@@ -748,7 +771,6 @@ class PerformanceManager:
     def _reset_samples(self) -> None:
         self._window.clear()
         self._last_sample_at = 0.0
-        self._last_state_update = float("-inf")
         self.state.patch(
             "performance",
             fps=0.0,

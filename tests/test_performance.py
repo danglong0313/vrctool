@@ -60,14 +60,18 @@ class PerformanceParsingTests(unittest.TestCase):
         parser = PresentMonCsvParser()
         self.assertIsNone(parser.feed_line("warning: waiting for target"))
         self.assertIsNone(
-            parser.feed_line("Application,ProcessID,SwapChainAddress,MsBetweenPresents")
+            parser.feed_line(
+                "Application,ProcessID,SwapChainAddress,Dropped,TimeInSeconds,MsBetweenPresents"
+            )
         )
 
-        sample = parser.feed_line("VRChat.exe,456,0x00001234,11.111")
+        sample = parser.feed_line("VRChat.exe,456,0x00001234,1,12.345,11.111")
 
         self.assertEqual(sample.process_id, 456)
         self.assertEqual(sample.swap_chain, "0x00001234")
         self.assertAlmostEqual(sample.frame_ms, 11.111)
+        self.assertAlmostEqual(sample.present_time, 12.345)
+        self.assertTrue(sample.dropped)
 
     def test_frame_window_uses_one_dominant_swap_chain(self) -> None:
         window = FrameWindow(window_seconds=5.0)
@@ -80,6 +84,49 @@ class PerformanceParsingTests(unittest.TestCase):
         self.assertEqual(metrics.swap_chain, "primary")
         self.assertAlmostEqual(metrics.fps, 100.0)
         self.assertEqual(metrics.sample_count, 10)
+
+    def test_frame_window_switches_away_from_stale_swap_chain(self) -> None:
+        window = FrameWindow(window_seconds=5.0)
+        metrics = None
+        for index in range(100):
+            metrics = window.add(
+                PresentSample(1, "old", 5.0, present_time=index * 0.01),
+                100.0,
+            )
+        for index in range(10):
+            metrics = window.add(
+                PresentSample(1, "current", 12.5, present_time=4.0 + index * 0.01),
+                100.0,
+            )
+
+        self.assertEqual(metrics.swap_chain, "current")
+        self.assertAlmostEqual(metrics.fps, 80.0)
+
+    def test_frame_window_uses_presentmon_event_time_instead_of_read_time(self) -> None:
+        window = FrameWindow(window_seconds=5.0)
+        window.add(PresentSample(1, "main", 10.0, present_time=0.0), 100.0)
+        metrics = window.add(PresentSample(1, "main", 20.0, present_time=10.0), 100.0)
+
+        self.assertEqual(metrics.sample_count, 1)
+        self.assertAlmostEqual(metrics.fps, 50.0)
+
+    def test_ingest_uses_latest_sample_even_when_rows_arrive_together(self) -> None:
+        state = RuntimeState()
+        manager = PerformanceManager(
+            state,
+            lambda _message: None,
+            presentmon_path=Path(__file__),
+            clock=lambda: 100.0,
+            platform_name="nt",
+        )
+
+        manager._ingest_sample(PresentSample(1, "main", 10.0, present_time=1.0))
+        manager._ingest_sample(PresentSample(1, "main", 20.0, present_time=1.01))
+        performance = state.snapshot()["performance"]
+
+        self.assertEqual(performance["sample_count"], 2)
+        self.assertEqual(performance["frame_ms"], 15.0)
+        self.assertEqual(performance["fps"], 66.7)
 
     def test_message_lists_only_enabled_metrics(self) -> None:
         fps, avg_fps, frame_ms = 72.3, 69.0, 13.9

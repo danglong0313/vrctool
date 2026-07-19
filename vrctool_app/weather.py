@@ -186,14 +186,19 @@ class WeatherManager:
 
     async def refresh(self, auto_locate: bool = False) -> bool:
         async with self._refresh_lock:
-            updates = {
-                **self._empty_weather_values(),
-                "updating": True,
-                "status": "更新中",
-                "error": "",
-            }
+            previous = self.state.snapshot()["weather"]
+            had_valid_weather = bool(
+                previous.get("ready")
+                and str(previous.get("location_name") or "").strip()
+                and previous.get("temperature") is not None
+            )
+            preserve_previous = had_valid_weather and not auto_locate
+            updates = {"updating": True, "status": "更新中", "error": ""}
             if auto_locate:
                 updates.update(self._empty_location_values())
+                updates.update(self._empty_weather_values())
+            elif not had_valid_weather:
+                updates.update(self._empty_weather_values())
             self.state.patch("weather", **updates)
             try:
                 snapshot = self.state.snapshot()["weather"]
@@ -224,12 +229,19 @@ class WeatherManager:
                     last_update=datetime.now().strftime("%H:%M:%S"),
                 )
                 return True
-            except (WeatherError, TypeError, ValueError) as exc:
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                failure_values = (
+                    self._empty_weather_values()
+                    if not preserve_previous
+                    else {"ready": True}
+                )
                 self.state.patch(
                     "weather",
-                    **self._empty_weather_values(),
+                    **failure_values,
                     updating=False,
-                    status="更新失败",
+                    status=("更新失败，继续使用上次数据" if preserve_previous else "更新失败"),
                     error=str(exc),
                 )
                 self.state.log("err", f"天气更新失败：{exc}")
@@ -255,6 +267,7 @@ class WeatherManager:
                 return False
             self.state.patch(
                 "weather",
+                **self._empty_weather_values(),
                 latitude=latitude,
                 longitude=longitude,
                 location_name=city,
@@ -282,6 +295,7 @@ class WeatherManager:
                 raise WeatherError(error) from open_meteo_error
         self.state.patch(
             "weather",
+            **self._empty_weather_values(),
             **location,
             location_source="manual",
             location_accuracy=0.0,
@@ -312,29 +326,53 @@ class WeatherManager:
 
     async def _broadcast_loop(self) -> None:
         while self.state.snapshot()["weather"].get("broadcast_enabled"):
-            snapshot = self.state.snapshot()["weather"]
-            success = await self.refresh(
+            await self._broadcast_once()
+            weather = self.state.snapshot()["weather"]
+            try:
+                interval = float(weather.get("interval") or DEFAULT_WEATHER_INTERVAL)
+            except (TypeError, ValueError):
+                interval = DEFAULT_WEATHER_INTERVAL
+            interval = max(MIN_WEATHER_INTERVAL, min(interval, MAX_WEATHER_INTERVAL))
+            await asyncio.sleep(interval)
+
+    async def _broadcast_once(self) -> bool:
+        snapshot = self.state.snapshot()["weather"]
+        try:
+            await self.refresh(
                 auto_locate=not str(snapshot.get("location_name") or "").strip()
             )
-            weather = self.state.snapshot()["weather"]
-            if success:
-                message = format_weather_message(weather)
-                if message:
-                    try:
-                        self.send_message(message)
-                        self.state.patch(
-                            "weather",
-                            last_sent=datetime.now().strftime("%H:%M:%S"),
-                            last_message=message,
-                        )
-                    except Exception as exc:
-                        self.state.patch("weather", error=f"ChatBox 发送失败：{exc}")
-                        self.state.log("err", f"天气 ChatBox 发送失败：{exc}")
-            interval = max(
-                MIN_WEATHER_INTERVAL,
-                float(weather.get("interval") or DEFAULT_WEATHER_INTERVAL),
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self.state.patch(
+                "weather",
+                updating=False,
+                status="更新失败，继续等待重试",
+                error=str(exc),
             )
-            await asyncio.sleep(interval)
+            self.state.log("err", f"天气广播任务异常，稍后重试：{exc}")
+
+        weather = self.state.snapshot()["weather"]
+        try:
+            message = format_weather_message(weather)
+        except Exception as exc:
+            self.state.patch("weather", error=f"天气消息生成失败：{exc}")
+            self.state.log("err", f"天气消息生成失败：{exc}")
+            return False
+        if not message:
+            return False
+        try:
+            self.send_message(message)
+        except Exception as exc:
+            self.state.patch("weather", error=f"ChatBox 发送失败：{exc}")
+            self.state.log("err", f"天气 ChatBox 发送失败：{exc}")
+            return False
+        self.state.patch(
+            "weather",
+            last_sent=datetime.now().strftime("%H:%M:%S"),
+            last_message=message,
+        )
+        return True
 
     def _locate_by_ip(self) -> dict[str, Any]:
         try:
