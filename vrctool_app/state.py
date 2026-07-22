@@ -145,7 +145,7 @@ class RuntimeState:
                 "duration_seconds": 0.0,
                 "sessions": [],
                 "status": "等待播放",
-                "reason": "请先在 QQ 音乐或网易云音乐中开始播放歌曲",
+                "reason": "请先在 QQ 音乐、网易云音乐、汽水音乐或酷狗音乐中开始播放歌曲",
                 "error": "",
                 "last_update": "",
                 "last_sent": "",

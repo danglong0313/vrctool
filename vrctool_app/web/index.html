@@ -6,9 +6,9 @@
     <title>vrctool</title>
     <link rel="icon" type="image/png" href="/logo.png?v=20260714-favicon-1" />
     <meta http-equiv="Cache-Control" content="no-store" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260719-v250-1" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260723-v251-1" />
     <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-    <script defer src="/static/app.js?v=20260719-v250-1"></script>
+    <script defer src="/static/app.js?v=20260723-v251-1"></script>
   </head>
   <body>
     <div class="app-shell">
@@ -75,7 +75,7 @@
         <section class="side-card update-card" id="updateCard" aria-labelledby="updateCardTitle">
           <div class="side-card-head">
             <span id="updateCardTitle">应用更新</span>
-            <span class="version-badge" id="currentVersion">v2.5.0</span>
+            <span class="version-badge" id="currentVersion">v2.5.1</span>
           </div>
           <div class="update-summary">
             <strong id="updateTitle">等待检查</strong>
@@ -432,7 +432,7 @@
                   <span></span>
                 </div>
                 <div class="now-playing-copy">
-                  <span id="nowPlayingPlayer">QQ 音乐 / 网易云音乐</span>
+                  <span id="nowPlayingPlayer">QQ 音乐 / 网易云音乐 / 汽水音乐 / 酷狗音乐</span>
                   <strong id="nowPlayingTitle">还没有检测到歌曲</strong>
                   <p id="nowPlayingArtist">启动播放器并开始播放即可自动识别</p>
                 </div>
@@ -456,7 +456,7 @@
                 <span id="nowPlayingLastSent">尚未发送</span>
               </div>
               <p class="performance-reason" id="nowPlayingReason">
-                请先在 QQ 音乐或网易云音乐中开始播放歌曲。
+                请先在 QQ 音乐、网易云音乐、汽水音乐或酷狗音乐中开始播放歌曲。
               </p>
             </section>
 
@@ -474,6 +474,8 @@
                   <option value="auto">自动选择正在播放的应用</option>
                   <option value="qqmusic">只使用 QQ 音乐</option>
                   <option value="netease">只使用网易云音乐</option>
+                  <option value="soda">只使用汽水音乐</option>
+                  <option value="kugou">只使用酷狗音乐</option>
                 </select>
               </label>
               <div class="toggle-row">
@@ -528,6 +530,9 @@
               <p class="mini now-playing-preview" id="nowPlayingPreview">正在播放: ♪ 歌名 | 歌手: 歌手</p>
               <p class="mini now-playing-privacy">
                 歌名属于个人播放信息，只有主动开启广播后才会发送到 VRChat。
+              </p>
+              <p class="mini now-playing-privacy">
+                QQ 音乐与汽水音乐可返回系统播放进度；网易云音乐官方客户端不返回有效进度；酷狗音乐取决于客户端版本。
               </p>
               <button class="primary" id="saveNowPlayingSettings" type="button">
                 <i data-lucide="save"></i>
@@ -873,7 +878,7 @@
             </div>
           </div>
           <div class="release-notes-head-actions">
-            <span class="version-badge" id="releaseNotesVersion">v2.5.0</span>
+            <span class="version-badge" id="releaseNotesVersion">v2.5.1</span>
             <button class="icon-button ghost" id="dismissReleaseNotesModal" type="button" title="关闭">
               <i data-lucide="x"></i>
             </button>

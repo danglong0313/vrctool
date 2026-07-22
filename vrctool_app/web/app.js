@@ -520,7 +520,8 @@ function renderNowPlayingState(nowPlaying) {
   card.classList.toggle("is-error", failed);
   $("nowPlayingDisc").classList.toggle("is-spinning", playing);
 
-  $("nowPlayingPlayer").textContent = nowPlaying.player_name || "QQ 音乐 / 网易云音乐";
+  $("nowPlayingPlayer").textContent = nowPlaying.player_name
+    || "QQ 音乐 / 网易云音乐 / 汽水音乐 / 酷狗音乐";
   $("nowPlayingTitle").textContent = ready ? nowPlaying.title : "还没有检测到歌曲";
   $("nowPlayingArtist").textContent = ready
     ? nowPlaying.artist || "未知歌手"
@@ -533,8 +534,10 @@ function renderNowPlayingState(nowPlaying) {
     nowPlaying.duration_seconds,
   );
   const progressUnavailable = nowPlaying.player === "netease"
-    ? "网易云音乐官方客户端不支持返回进度；QQ 音乐可以显示"
-    : "播放器暂未提供进度";
+    ? "网易云音乐官方客户端不支持返回进度；QQ 音乐与汽水音乐可以显示"
+    : nowPlaying.player === "kugou"
+      ? "当前酷狗音乐客户端暂未通过系统媒体会话返回进度"
+      : "播放器暂未提供进度";
   $("nowPlayingProgress").textContent = progressLine || (ready ? progressUnavailable : "等待播放器进度");
   $("nowPlayingProgress").classList.toggle("is-unavailable", !progressLine);
   $("nowPlayingLastUpdate").textContent = `最近检测 ${nowPlaying.last_update || "-"}`;

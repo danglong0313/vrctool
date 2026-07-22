@@ -38,12 +38,22 @@ def media_session(
     position_seconds: float = 10.0,
     duration_seconds: float = 60.0,
 ) -> MediaSessionSnapshot:
-    source_id = "QQMusic.exe" if player == "qqmusic" else "cloudmusic.exe"
-    player_name = "QQ 音乐" if player == "qqmusic" else "网易云音乐"
+    source_ids = {
+        "qqmusic": "QQMusic.exe",
+        "netease": "cloudmusic.exe",
+        "soda": "汽水音乐",
+        "kugou": "KuGou.exe",
+    }
+    player_names = {
+        "qqmusic": "QQ 音乐",
+        "netease": "网易云音乐",
+        "soda": "汽水音乐",
+        "kugou": "酷狗音乐",
+    }
     return MediaSessionSnapshot(
-        source_id=source_id,
+        source_id=source_ids[player],
         player=player,
-        player_name=player_name,
+        player_name=player_names[player],
         title=title,
         artist=artist,
         album="专辑",
@@ -54,10 +64,16 @@ def media_session(
 
 
 class NowPlayingFormattingTests(unittest.TestCase):
-    def test_supported_player_identifiers_cover_qq_and_netease(self) -> None:
+    def test_supported_player_identifiers_cover_all_supported_players(self) -> None:
         self.assertEqual(detect_supported_player("QQMusic.exe"), "qqmusic")
         self.assertEqual(detect_supported_player("cloudmusic.exe"), "netease")
         self.assertEqual(detect_supported_player("Orpheus.MediaSession"), "netease")
+        self.assertEqual(detect_supported_player("SodaMusic.exe"), "soda")
+        self.assertEqual(detect_supported_player("汽水音乐"), "soda")
+        self.assertEqual(detect_supported_player("KuGou.exe"), "kugou")
+        self.assertEqual(detect_supported_player("KuGoo.exe"), "kugou")
+        self.assertEqual(detect_supported_player("KGMusic.MediaSession"), "kugou")
+        self.assertEqual(detect_supported_player("酷狗音乐"), "kugou")
         self.assertEqual(detect_supported_player("chrome.exe"), "")
 
     def test_auto_selection_prefers_playing_session_then_qq(self) -> None:
@@ -71,8 +87,15 @@ class NowPlayingFormattingTests(unittest.TestCase):
         self.assertEqual(select_session(sessions).player, "qqmusic")
 
     def test_manual_selection_uses_requested_player(self) -> None:
-        sessions = [media_session("qqmusic", "QQ"), media_session("netease", "网易云")]
+        sessions = [
+            media_session("qqmusic", "QQ"),
+            media_session("netease", "网易云"),
+            media_session("soda", "汽水"),
+            media_session("kugou", "酷狗"),
+        ]
         self.assertEqual(select_session(sessions, "netease").title, "网易云")
+        self.assertEqual(select_session(sessions, "soda").title, "汽水")
+        self.assertEqual(select_session(sessions, "kugou").title, "酷狗")
 
     def test_selected_content_is_combined_and_cleans_line_breaks(self) -> None:
         message = format_now_playing_message(
@@ -208,6 +231,20 @@ class NowPlayingManagerTests(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaises(ValueError):
             await manager.configure(False, 5, "spotify", True, True, False, False, True)
+
+    async def test_soda_and_kugou_player_selections_are_accepted(self) -> None:
+        state = RuntimeState()
+        manager = NowPlayingManager(
+            state,
+            lambda _message: None,
+            provider=FakeMediaProvider(),
+        )
+
+        for player, label in (("soda", "汽水音乐"), ("kugou", "酷狗音乐")):
+            await manager.configure(False, 5, player, True, True, False, False, True)
+            current = state.snapshot()["now_playing"]
+            self.assertEqual(current["preferred_player"], player)
+            self.assertEqual(current["reason"], f"未检测到{label}的播放信息")
 
     async def test_at_least_one_content_switch_is_required(self) -> None:
         manager = NowPlayingManager(

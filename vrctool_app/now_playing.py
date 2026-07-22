@@ -23,15 +23,19 @@ MAX_INTERVAL = 60.0
 POLL_INTERVAL = 1.0
 PROGRESS_SEGMENTS = 6
 MAX_MESSAGE_LENGTH = 240
-SUPPORTED_PLAYERS = ("auto", "qqmusic", "netease")
+SUPPORTED_PLAYERS = ("auto", "qqmusic", "netease", "soda", "kugou")
 PLAYER_LABELS = {
     "auto": "自动选择",
     "qqmusic": "QQ 音乐",
     "netease": "网易云音乐",
+    "soda": "汽水音乐",
+    "kugou": "酷狗音乐",
 }
 PLAYER_IDENTIFIERS = {
     "qqmusic": ("qqmusic", "qq music", "qq音乐"),
     "netease": ("cloudmusic", "netease", "orpheus", "网易云"),
+    "soda": ("sodamusic", "soda music", "qishui", "汽水音乐"),
+    "kugou": ("kugou", "kugoo", "ku gou", "kgmusic", "酷狗音乐", "酷狗"),
 }
 
 
@@ -186,11 +190,11 @@ def select_session(
     preferred_player: str = "auto",
 ) -> Optional[MediaSessionSnapshot]:
     supported = [session for session in sessions if session.player in PLAYER_LABELS and session.player != "auto"]
-    if preferred_player in {"qqmusic", "netease"}:
+    if preferred_player in PLAYER_LABELS and preferred_player != "auto":
         supported = [session for session in supported if session.player == preferred_player]
     if not supported:
         return None
-    priority = {"qqmusic": 0, "netease": 1}
+    priority = {player: index for index, player in enumerate(SUPPORTED_PLAYERS[1:])}
     return min(
         supported,
         key=lambda session: (
@@ -299,7 +303,8 @@ class NowPlayingManager:
     ) -> None:
         preferred_player = str(preferred_player or "auto").casefold()
         if preferred_player not in SUPPORTED_PLAYERS:
-            raise ValueError("播放器只能选择自动、QQ 音乐或网易云音乐")
+            choices = "、".join(PLAYER_LABELS[player] for player in SUPPORTED_PLAYERS)
+            raise ValueError(f"播放器只能选择：{choices}")
         content_flags = (show_title, show_artist, show_album, show_player, show_progress)
         if not any(content_flags):
             raise ValueError("请至少开启一项 ChatBox 广播内容")
@@ -423,11 +428,11 @@ class NowPlayingManager:
 
     @staticmethod
     def _empty_reason(sessions: list[MediaSessionSnapshot], preferred: str) -> str:
-        if preferred in {"qqmusic", "netease"}:
+        if preferred in PLAYER_LABELS and preferred != "auto":
             return f"未检测到{PLAYER_LABELS[preferred]}的播放信息"
         if sessions:
-            return "QQ 音乐和网易云音乐当前均未播放"
-        return "请先在 QQ 音乐或网易云音乐中开始播放歌曲"
+            return "受支持的音乐播放器当前均未播放"
+        return "请先在 QQ 音乐、网易云音乐、汽水音乐或酷狗音乐中开始播放歌曲"
 
     async def _monitor_loop(self) -> None:
         while True:
