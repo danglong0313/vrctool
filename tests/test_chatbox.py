@@ -277,8 +277,10 @@ class ChatboxBatchTests(unittest.TestCase):
             show_album=False,
             show_player=False,
             show_progress=True,
+            show_lyrics=True,
             position_seconds=10.0,
             duration_seconds=60.0,
+            lyric="当前歌词",
         )
         manager.send_message("old", source="now_playing")
         state.patch("now_playing", title="第二首", artist="歌手 B")
@@ -286,7 +288,9 @@ class ChatboxBatchTests(unittest.TestCase):
         self.assertTrue(manager.send_next_batch())
         self.assertEqual(
             client.messages[0][1][0],
-            "正在播放: ♪ 第二首 | 歌手: 歌手 B\n0:10 ->----- 1:00",
+            "正在播放: ♪ 第二首 | 歌手: 歌手 B\n"
+            "0:10 ->----- 1:00\n"
+            "歌词: 当前歌词",
         )
         self.assertEqual(state.snapshot()["chatbox"]["last_source"], "now_playing")
         self.assertTrue(state.snapshot()["now_playing"]["last_sent"])

@@ -217,6 +217,7 @@ class NowPlayingConfigPayload(BaseModel):
     show_album: bool = False
     show_player: bool = False
     show_progress: bool = True
+    show_lyrics: bool = False
 
 
 class WeatherConfigPayload(BaseModel):
@@ -677,6 +678,7 @@ async def configure_now_playing(payload: NowPlayingConfigPayload):
             payload.show_album,
             payload.show_player,
             payload.show_progress,
+            payload.show_lyrics,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -692,6 +694,7 @@ async def configure_now_playing(payload: NowPlayingConfigPayload):
         show_album=snapshot["show_album"],
         show_player=snapshot["show_player"],
         show_progress=snapshot["show_progress"],
+        show_lyrics=snapshot["show_lyrics"],
     )
     save_config(config)
     chatbox.source_changed("now_playing")
@@ -700,7 +703,7 @@ async def configure_now_playing(payload: NowPlayingConfigPayload):
 
 @app.post("/api/now-playing/refresh")
 async def refresh_now_playing():
-    await now_playing.refresh()
+    await now_playing.refresh(force_lyrics=True)
     chatbox.source_changed("now_playing")
     return state.snapshot()
 

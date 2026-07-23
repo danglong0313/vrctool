@@ -773,6 +773,8 @@ h3 {
 
 .now-playing-disc {
   position: relative;
+  display: grid;
+  place-items: center;
   width: 104px;
   height: 104px;
   border: 1px solid color-mix(in srgb, var(--accent-2) 40%, var(--line));
@@ -782,6 +784,12 @@ h3 {
     repeating-radial-gradient(circle, transparent 0 7px, color-mix(in srgb, var(--ink) 10%, transparent) 8px 9px),
     conic-gradient(from 20deg, color-mix(in srgb, var(--accent) 48%, #111), #14141c 30%, color-mix(in srgb, var(--accent-2) 35%, #111) 62%, #14141c);
   box-shadow: inset 0 0 18px #0008, 0 14px 28px #0003;
+  transition:
+    border-radius 220ms ease,
+    border-color 220ms ease,
+    background 220ms ease,
+    box-shadow 220ms ease,
+    transform 220ms ease;
 }
 
 .now-playing-disc::after {
@@ -791,6 +799,46 @@ h3 {
   border-radius: 50%;
   background: var(--ink);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--panel) 80%, transparent);
+}
+
+.now-playing-player-logo {
+  display: none;
+  width: 82px;
+  height: 82px;
+  border-radius: 19px;
+  object-fit: contain;
+  filter: drop-shadow(0 9px 16px #0004);
+  user-select: none;
+}
+
+.now-playing-disc.has-player-logo {
+  border-color: color-mix(in srgb, var(--player-color, var(--accent-2)) 52%, var(--line));
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 30% 18%, color-mix(in srgb, var(--player-color, var(--accent-2)) 22%, transparent), transparent 48%),
+    color-mix(in srgb, var(--panel) 94%, var(--player-color, var(--accent-2)));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--player-color, var(--accent-2)) 12%, transparent),
+    0 14px 30px color-mix(in srgb, var(--player-color, #000) 24%, transparent);
+}
+
+.now-playing-disc.has-player-logo::after {
+  display: none;
+}
+
+.now-playing-disc.has-player-logo .now-playing-player-logo {
+  display: block;
+}
+
+.now-playing-disc[data-player="qqmusic"] .now-playing-player-logo {
+  border-radius: 50%;
+}
+
+.now-playing-disc.has-player-logo.is-logo-playing {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--player-color, var(--accent-2)) 18%, transparent),
+    0 0 0 5px color-mix(in srgb, var(--player-color, var(--accent-2)) 8%, transparent),
+    0 16px 34px color-mix(in srgb, var(--player-color, #000) 30%, transparent);
 }
 
 .now-playing-disc.is-spinning {
@@ -853,7 +901,8 @@ h3 {
   white-space: nowrap;
 }
 
-.now-playing-meta .now-playing-progress-row {
+.now-playing-meta .now-playing-progress-row,
+.now-playing-meta .now-playing-lyric-row {
   grid-column: 1 / -1;
 }
 
@@ -865,6 +914,32 @@ h3 {
 .now-playing-progress-row strong.is-unavailable {
   color: var(--muted);
   font-family: inherit;
+}
+
+.now-playing-lyric-row {
+  position: relative;
+}
+
+.now-playing-lyric-row::after {
+  content: "LRC";
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  color: color-mix(in srgb, var(--accent-2) 65%, var(--muted));
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.now-playing-lyric-row strong {
+  padding-right: 42px;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.now-playing-lyric-row strong.is-unavailable {
+  color: var(--muted);
+  font-weight: 500;
 }
 
 .now-playing-settings {

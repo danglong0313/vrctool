@@ -36,6 +36,7 @@ class ConfigStoreTests(unittest.TestCase):
         self.assertFalse(now_playing["show_album"])
         self.assertFalse(now_playing["show_player"])
         self.assertTrue(now_playing["show_progress"])
+        self.assertFalse(now_playing["show_lyrics"])
 
     def test_legacy_now_playing_template_is_migrated_to_content_switches(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -59,6 +60,7 @@ class ConfigStoreTests(unittest.TestCase):
         self.assertFalse(loaded["now_playing"]["show_album"])
         self.assertTrue(loaded["now_playing"]["show_player"])
         self.assertTrue(loaded["now_playing"]["show_progress"])
+        self.assertFalse(loaded["now_playing"]["show_lyrics"])
         self.assertNotIn("template", loaded["now_playing"])
         self.assertNotIn("template", persisted["now_playing"])
 

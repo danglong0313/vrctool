@@ -5,6 +5,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+from vrctool_app.lyrics import LyricLine, LyricsResult
 from vrctool_app.now_playing import (
     MediaSessionError,
     MediaSessionSnapshot,
@@ -27,6 +28,16 @@ class FakeMediaProvider:
         if self.error:
             raise self.error
         return list(self.sessions)
+
+
+class FakeLyricsProvider:
+    def __init__(self, result: LyricsResult | None = None) -> None:
+        self.result = result or LyricsResult()
+        self.calls = []
+
+    async def fetch_synced_lyrics(self, title, artist, album, duration_seconds):
+        self.calls.append((title, artist, album, duration_seconds))
+        return self.result
 
 
 def media_session(
@@ -137,6 +148,29 @@ class NowPlayingFormattingTests(unittest.TestCase):
         self.assertEqual(format_progress_line(10, 60), "0:10 ->----- 1:00")
         self.assertEqual(format_progress_line(30, 60), "0:30 --->--- 1:00")
         self.assertEqual(format_progress_line(60, 60), "1:00 ------> 1:00")
+
+    def test_current_lyric_is_rendered_as_chatbox_third_line(self) -> None:
+        message = format_now_playing_message(
+            {
+                "title": "测试歌曲",
+                "artist": "测试歌手",
+                "show_title": True,
+                "show_artist": True,
+                "show_progress": True,
+                "show_lyrics": True,
+                "position_seconds": 10,
+                "duration_seconds": 60,
+                "lyric": "这是当前歌词",
+            }
+        )
+
+        self.assertEqual(
+            message,
+            "正在播放: ♪ 测试歌曲 | 歌手: 测试歌手\n"
+            "0:10 ->----- 1:00\n"
+            "歌词: 这是当前歌词",
+        )
+        self.assertLessEqual(len(message), 240)
 
     def test_timeline_position_advances_from_last_update_while_playing(self) -> None:
         now = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
@@ -254,3 +288,177 @@ class NowPlayingManagerTests(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaises(ValueError):
             await manager.configure(False, 5, "auto", False, False, False, False, False)
+
+    async def test_lyrics_require_progress_to_keep_chatbox_third_line(self) -> None:
+        manager = NowPlayingManager(
+            RuntimeState(),
+            lambda _message: None,
+            provider=FakeMediaProvider(),
+        )
+        with self.assertRaisesRegex(ValueError, "同时开启播放进度"):
+            await manager.configure(
+                False,
+                5,
+                "auto",
+                True,
+                True,
+                False,
+                False,
+                False,
+                True,
+            )
+
+    async def test_synced_lyrics_follow_current_media_position(self) -> None:
+        state = RuntimeState()
+        media_provider = FakeMediaProvider(
+            [media_session("qqmusic", "测试歌曲", position_seconds=12)]
+        )
+        lyrics_provider = FakeLyricsProvider(
+            LyricsResult(
+                lines=(
+                    LyricLine(1.0, "第一句"),
+                    LyricLine(10.0, "第二句"),
+                ),
+                matched=True,
+            )
+        )
+        manager = NowPlayingManager(
+            state,
+            lambda _message: None,
+            provider=media_provider,
+            lyrics_provider=lyrics_provider,
+        )
+
+        await manager.configure(
+            False,
+            5,
+            "auto",
+            True,
+            True,
+            False,
+            False,
+            True,
+            True,
+        )
+        self.assertIsNotNone(manager._lyrics_task)
+        await manager._lyrics_task
+
+        current = state.snapshot()["now_playing"]
+        self.assertTrue(current["lyrics_ready"])
+        self.assertEqual(current["lyric"], "第二句")
+        self.assertEqual(len(lyrics_provider.calls), 1)
+
+        media_provider.sessions = [
+            media_session("qqmusic", "测试歌曲", position_seconds=2)
+        ]
+        await manager.refresh()
+        self.assertEqual(state.snapshot()["now_playing"]["lyric"], "第一句")
+        self.assertEqual(len(lyrics_provider.calls), 1)
+        await manager.shutdown()
+
+    async def test_forced_refresh_retries_a_cached_lyrics_miss(self) -> None:
+        state = RuntimeState()
+        media_provider = FakeMediaProvider(
+            [media_session("qqmusic", "测试歌曲", position_seconds=12)]
+        )
+        lyrics_provider = FakeLyricsProvider(LyricsResult())
+        manager = NowPlayingManager(
+            state,
+            lambda _message: None,
+            provider=media_provider,
+            lyrics_provider=lyrics_provider,
+        )
+
+        await manager.configure(
+            False,
+            5,
+            "auto",
+            True,
+            True,
+            False,
+            False,
+            True,
+            True,
+        )
+        await manager._lyrics_task
+        self.assertEqual(state.snapshot()["now_playing"]["lyrics_status"], "未找到同步歌词")
+
+        lyrics_provider.result = LyricsResult(
+            lines=(LyricLine(1.0, "重试找到的歌词"),),
+            matched=True,
+            source="QQ音乐歌词",
+        )
+        await manager.refresh(force_lyrics=True)
+        await manager._lyrics_task
+
+        current = state.snapshot()["now_playing"]
+        self.assertEqual(current["lyric"], "重试找到的歌词")
+        self.assertEqual(current["lyrics_source"], "QQ音乐歌词")
+        self.assertEqual(len(lyrics_provider.calls), 2)
+        await manager.shutdown()
+
+    async def test_lyrics_are_not_requested_without_a_valid_timeline(self) -> None:
+        state = RuntimeState()
+        lyrics_provider = FakeLyricsProvider()
+        manager = NowPlayingManager(
+            state,
+            lambda _message: None,
+            provider=FakeMediaProvider(
+                [
+                    media_session(
+                        "netease",
+                        "无进度歌曲",
+                        position_seconds=0,
+                        duration_seconds=0,
+                    )
+                ]
+            ),
+            lyrics_provider=lyrics_provider,
+        )
+
+        await manager.configure(
+            False,
+            5,
+            "netease",
+            True,
+            True,
+            False,
+            False,
+            True,
+            True,
+        )
+
+        self.assertFalse(lyrics_provider.calls)
+        self.assertIn("无法同步歌词", state.snapshot()["now_playing"]["lyrics_status"])
+        await manager.shutdown()
+
+    async def test_kugou_does_not_request_unsupported_lyrics(self) -> None:
+        state = RuntimeState()
+        lyrics_provider = FakeLyricsProvider()
+        manager = NowPlayingManager(
+            state,
+            lambda _message: None,
+            provider=FakeMediaProvider(
+                [media_session("kugou", "测试歌曲", duration_seconds=60)]
+            ),
+            lyrics_provider=lyrics_provider,
+        )
+
+        await manager.configure(
+            False,
+            5,
+            "kugou",
+            True,
+            True,
+            False,
+            False,
+            True,
+            True,
+        )
+
+        self.assertFalse(lyrics_provider.calls)
+        self.assertEqual(
+            state.snapshot()["now_playing"]["lyrics_status"],
+            "当前播放器暂不支持歌词",
+        )
+        await manager.shutdown()

@@ -5,6 +5,14 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Iterable, Optional, Protocol
 
+from vrctool_app.lyrics import (
+    LyricLine,
+    LyricsLookupError,
+    LyricsProvider,
+    LyricsResult,
+    OnlineLyricsProvider,
+    current_lyric_line,
+)
 from vrctool_app.state import RuntimeState
 
 try:
@@ -23,7 +31,9 @@ MAX_INTERVAL = 60.0
 POLL_INTERVAL = 1.0
 PROGRESS_SEGMENTS = 6
 MAX_MESSAGE_LENGTH = 240
+MAX_LYRIC_LINE_LENGTH = 96
 SUPPORTED_PLAYERS = ("auto", "qqmusic", "netease", "soda", "kugou")
+LYRICS_SUPPORTED_PLAYERS = ("qqmusic", "soda")
 PLAYER_LABELS = {
     "auto": "自动选择",
     "qqmusic": "QQ 音乐",
@@ -176,13 +186,20 @@ def format_now_playing_message(now_playing: dict[str, Any]) -> str:
             now_playing.get("position_seconds"),
             now_playing.get("duration_seconds"),
         )
-    if not parts and not progress_line:
+    lyric_line = ""
+    if now_playing.get("show_lyrics"):
+        lyric = clean_media_text(now_playing.get("lyric"))
+        if lyric:
+            lyric_line = f"歌词: {lyric[:MAX_LYRIC_LINE_LENGTH]}"
+    if not parts and not progress_line and not lyric_line:
         return ""
     first_line = f"正在播放: {' | '.join(parts)}" if parts else "正在播放:"
-    if not progress_line:
+    secondary_lines = [line for line in (progress_line, lyric_line) if line]
+    if not secondary_lines:
         return first_line[:MAX_MESSAGE_LENGTH]
-    first_line_limit = max(0, MAX_MESSAGE_LENGTH - len(progress_line) - 1)
-    return f"{first_line[:first_line_limit]}\n{progress_line}"
+    suffix = "\n".join(secondary_lines)
+    first_line_limit = max(0, MAX_MESSAGE_LENGTH - len(suffix) - 1)
+    return f"{first_line[:first_line_limit]}\n{suffix}"[:MAX_MESSAGE_LENGTH]
 
 
 def select_session(
@@ -267,17 +284,23 @@ class NowPlayingManager:
         send_message: Callable[[str], Any],
         *,
         provider: Optional[MediaSessionProvider] = None,
+        lyrics_provider: Optional[LyricsProvider] = None,
         source_changed: Optional[Callable[[], Any]] = None,
         sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
     ) -> None:
         self.state = state
         self.send_message = send_message
         self._provider = provider or WinRTMediaSessionProvider()
+        self._lyrics_provider = lyrics_provider or OnlineLyricsProvider()
         self._source_changed = source_changed or (lambda: None)
         self._sleep = sleep
         self._monitor_task: Optional[asyncio.Task] = None
         self._broadcast_task: Optional[asyncio.Task] = None
+        self._lyrics_task: Optional[asyncio.Task] = None
         self._broadcast_wakeup = asyncio.Event()
+        self._lyrics_track_key: Optional[tuple[str, str, str, int]] = None
+        self._lyrics_lines: tuple[LyricLine, ...] = ()
+        self._lyrics_cache: dict[tuple[str, str, str, int], LyricsResult] = {}
 
     async def start(self) -> None:
         if self._monitor_task and not self._monitor_task.done():
@@ -300,12 +323,22 @@ class NowPlayingManager:
         show_album: bool,
         show_player: bool,
         show_progress: bool,
+        show_lyrics: bool = False,
     ) -> None:
         preferred_player = str(preferred_player or "auto").casefold()
         if preferred_player not in SUPPORTED_PLAYERS:
             choices = "、".join(PLAYER_LABELS[player] for player in SUPPORTED_PLAYERS)
             raise ValueError(f"播放器只能选择：{choices}")
-        content_flags = (show_title, show_artist, show_album, show_player, show_progress)
+        if show_lyrics and not show_progress:
+            raise ValueError("同步歌词需要同时开启播放进度")
+        content_flags = (
+            show_title,
+            show_artist,
+            show_album,
+            show_player,
+            show_progress,
+            show_lyrics,
+        )
         if not any(content_flags):
             raise ValueError("请至少开启一项 ChatBox 广播内容")
         interval = max(MIN_INTERVAL, min(float(interval), MAX_INTERVAL))
@@ -319,8 +352,11 @@ class NowPlayingManager:
             show_album=bool(show_album),
             show_player=bool(show_player),
             show_progress=bool(show_progress),
+            show_lyrics=bool(show_lyrics),
         )
-        await self.refresh()
+        if show_lyrics:
+            self._lyrics_track_key = None
+        await self.refresh(force_lyrics=show_lyrics)
         await self._stop_broadcast_task()
         if enabled:
             self._ensure_broadcast_task()
@@ -330,7 +366,7 @@ class NowPlayingManager:
             self.state.log("ok", "正在播放 ChatBox 广播已关闭")
         self._source_changed()
 
-    async def refresh(self) -> bool:
+    async def refresh(self, *, force_lyrics: bool = False) -> bool:
         previous = self.state.snapshot()["now_playing"]
         previous_key = self._state_key(previous)
         try:
@@ -381,6 +417,7 @@ class NowPlayingManager:
                     ),
                 )
             self.state.patch("now_playing", **updates)
+            await self._sync_lyrics(selected, force=force_lyrics)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -397,6 +434,7 @@ class NowPlayingManager:
                 sessions=[],
             )
             self.state.log("warn", f"正在播放检测失败：{exc}")
+            await self._clear_lyrics("播放器检测不可用")
             self._notify_if_changed(previous_key)
             return False
 
@@ -406,6 +444,150 @@ class NowPlayingManager:
     async def shutdown(self) -> None:
         await self._stop_task("_monitor_task")
         await self._stop_broadcast_task()
+        await self._stop_task("_lyrics_task")
+
+    async def _sync_lyrics(
+        self,
+        selected: Optional[MediaSessionSnapshot],
+        *,
+        force: bool = False,
+    ) -> None:
+        snapshot = self.state.snapshot()["now_playing"]
+        if not snapshot.get("show_lyrics"):
+            await self._clear_lyrics("歌词广播未开启")
+            return
+        if selected is None or not selected.title:
+            await self._clear_lyrics("等待歌曲信息")
+            return
+        if selected.duration_seconds <= 0:
+            await self._clear_lyrics("播放器未提供有效进度，无法同步歌词")
+            return
+        if selected.player not in LYRICS_SUPPORTED_PLAYERS:
+            await self._clear_lyrics("当前播放器暂不支持歌词")
+            return
+
+        track_key = self._lyrics_key(selected)
+        if force:
+            await self._stop_task("_lyrics_task")
+            self._lyrics_cache.pop(track_key, None)
+            self._lyrics_track_key = None
+        if track_key != self._lyrics_track_key:
+            await self._stop_task("_lyrics_task")
+            self._lyrics_track_key = track_key
+            self._lyrics_lines = ()
+            cached = self._lyrics_cache.get(track_key)
+            if cached is not None:
+                self._apply_lyrics_result(track_key, cached)
+            else:
+                self.state.patch(
+                    "now_playing",
+                    lyric="",
+                    lyrics_ready=False,
+                    lyrics_status="正在查找同步歌词",
+                    lyrics_source="LRCLIB / QQ音乐歌词 / 网易云歌词",
+                    lyrics_error="",
+                )
+                self._lyrics_task = asyncio.create_task(
+                    self._load_lyrics(track_key, selected),
+                    name="vrctool-now-playing-lyrics",
+                )
+
+        lyric = current_lyric_line(self._lyrics_lines, selected.position_seconds)
+        if lyric != self.state.snapshot()["now_playing"].get("lyric"):
+            self.state.patch("now_playing", lyric=lyric)
+
+    async def _clear_lyrics(self, status: str) -> None:
+        await self._stop_task("_lyrics_task")
+        self._lyrics_track_key = None
+        self._lyrics_lines = ()
+        self.state.patch(
+            "now_playing",
+            lyric="",
+            lyrics_ready=False,
+            lyrics_status=status,
+            lyrics_source="",
+            lyrics_error="",
+        )
+
+    async def _load_lyrics(
+        self,
+        track_key: tuple[str, str, str, int],
+        selected: MediaSessionSnapshot,
+    ) -> None:
+        try:
+            result = await self._lyrics_provider.fetch_synced_lyrics(
+                selected.title,
+                selected.artist,
+                selected.album,
+                selected.duration_seconds,
+            )
+        except asyncio.CancelledError:
+            raise
+        except LyricsLookupError as exc:
+            if track_key == self._lyrics_track_key:
+                self.state.patch(
+                    "now_playing",
+                    lyric="",
+                    lyrics_ready=False,
+                    lyrics_status="歌词服务暂时不可用",
+                    lyrics_source="在线歌词库",
+                    lyrics_error=str(exc),
+                )
+            return
+        except Exception as exc:
+            if track_key == self._lyrics_track_key:
+                self.state.patch(
+                    "now_playing",
+                    lyric="",
+                    lyrics_ready=False,
+                    lyrics_status="歌词读取失败",
+                    lyrics_source="在线歌词库",
+                    lyrics_error=str(exc),
+                )
+            return
+
+        if track_key != self._lyrics_track_key:
+            return
+        self._lyrics_cache[track_key] = result
+        while len(self._lyrics_cache) > 32:
+            self._lyrics_cache.pop(next(iter(self._lyrics_cache)))
+        self._apply_lyrics_result(track_key, result)
+
+    def _apply_lyrics_result(
+        self,
+        track_key: tuple[str, str, str, int],
+        result: LyricsResult,
+    ) -> None:
+        if track_key != self._lyrics_track_key:
+            return
+        self._lyrics_lines = result.lines
+        snapshot = self.state.snapshot()["now_playing"]
+        lyric = current_lyric_line(result.lines, snapshot.get("position_seconds"))
+        if result.lines:
+            status = "同步歌词已就绪"
+        elif result.instrumental:
+            status = "纯音乐，无歌词"
+        elif result.matched:
+            status = "已找到歌曲，但没有同步歌词"
+        else:
+            status = "未找到同步歌词"
+        self.state.patch(
+            "now_playing",
+            lyric=lyric,
+            lyrics_ready=bool(result.lines),
+            lyrics_status=status,
+            lyrics_source=result.source,
+            lyrics_error="",
+        )
+
+    @staticmethod
+    def _lyrics_key(selected: MediaSessionSnapshot) -> tuple[str, str, str, int]:
+        return (
+            clean_media_text(selected.title).casefold(),
+            clean_media_text(selected.artist).casefold(),
+            clean_media_text(selected.album).casefold(),
+            max(0, round(float(selected.duration_seconds))),
+        )
 
     def _notify_if_changed(self, previous_key: tuple[Any, ...]) -> None:
         current = self.state.snapshot()["now_playing"]

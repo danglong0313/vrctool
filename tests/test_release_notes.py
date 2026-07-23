@@ -20,6 +20,14 @@ class ReleaseNotesTests(unittest.TestCase):
         notes["items"].clear()
         self.assertTrue(current_release_notes()["items"])
 
+    def test_lyrics_support_is_explained_in_plain_language(self) -> None:
+        notes = current_release_notes()
+        text = " ".join([notes["title"], *notes["items"]])
+        self.assertIn("QQ 音乐和汽水音乐现在支持显示歌词", text)
+        self.assertIn("网易云音乐和酷狗音乐暂不支持歌词", text)
+        for technical_term in ("Windows", "媒体会话", "接口", "LRCLIB", "时间轴", "匹配"):
+            self.assertNotIn(technical_term, text)
+
 
 if __name__ == "__main__":
     unittest.main()

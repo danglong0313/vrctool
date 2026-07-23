@@ -64,6 +64,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "show_album": False,
         "show_player": False,
         "show_progress": True,
+        "show_lyrics": False,
     },
     "osc": {
         "listen_host": "127.0.0.1",
@@ -138,6 +139,7 @@ def load_config() -> Dict[str, Any]:
             if not any(selected.values()):
                 selected["show_title"] = True
             selected["show_progress"] = True
+            selected["show_lyrics"] = False
             config.setdefault("now_playing", {}).update(selected)
             config["now_playing"].pop("template", None)
             upgraded = True

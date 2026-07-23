@@ -503,10 +503,60 @@ function nowPlayingProgressLine(positionSeconds, durationSeconds) {
   return `${playbackTime(position)} ${bar} ${playbackTime(duration)}`;
 }
 
+const NOW_PLAYING_PLAYER_LOGOS = Object.freeze({
+  qqmusic: {
+    src: "/static/player-logos/qqmusic.webp?v=20260723-v252-1",
+    label: "QQ 音乐",
+    color: "#20c875",
+  },
+  netease: {
+    src: "/static/player-logos/netease.png?v=20260723-v252-1",
+    label: "网易云音乐",
+    color: "#e83a35",
+  },
+  soda: {
+    src: "/static/player-logos/soda.png?v=20260723-v252-1",
+    label: "汽水音乐",
+    color: "#74f7a7",
+  },
+  kugou: {
+    src: "/static/player-logos/kugou.png?v=20260723-v252-1",
+    label: "酷狗音乐",
+    color: "#2796f3",
+  },
+});
+
+function renderNowPlayingPlayerLogo(player, playing) {
+  const disc = $("nowPlayingDisc");
+  const logo = $("nowPlayingLogo");
+  const playerKey = String(player || "").toLowerCase();
+  const logoConfig = NOW_PLAYING_PLAYER_LOGOS[playerKey];
+
+  disc.classList.toggle("has-player-logo", Boolean(logoConfig));
+  disc.classList.toggle("is-logo-playing", Boolean(logoConfig && playing));
+  disc.classList.toggle("is-spinning", Boolean(!logoConfig && playing));
+
+  if (!logoConfig) {
+    logo.removeAttribute("src");
+    delete disc.dataset.player;
+    disc.style.removeProperty("--player-color");
+    disc.setAttribute("aria-label", "默认音乐图标");
+    return;
+  }
+
+  if (logo.getAttribute("src") !== logoConfig.src) {
+    logo.src = logoConfig.src;
+  }
+  disc.dataset.player = playerKey;
+  disc.style.setProperty("--player-color", logoConfig.color);
+  disc.setAttribute("aria-label", `${logoConfig.label} Logo`);
+}
+
 function renderNowPlayingState(nowPlaying) {
   const available = Boolean(nowPlaying.available);
   const ready = Boolean(nowPlaying.ready && nowPlaying.title);
   const playing = Boolean(nowPlaying.playing && ready);
+  const showLyrics = Boolean(nowPlaying.show_lyrics);
   const failed = Boolean(nowPlaying.error);
   const card = $("nowPlayingCard");
   const status = $("nowPlayingStatus");
@@ -518,7 +568,7 @@ function renderNowPlayingState(nowPlaying) {
   status.classList.toggle("is-danger", failed);
   card.classList.toggle("is-playing", playing);
   card.classList.toggle("is-error", failed);
-  $("nowPlayingDisc").classList.toggle("is-spinning", playing);
+  renderNowPlayingPlayerLogo(nowPlaying.player, playing);
 
   $("nowPlayingPlayer").textContent = nowPlaying.player_name
     || "QQ 音乐 / 网易云音乐 / 汽水音乐 / 酷狗音乐";
@@ -540,6 +590,13 @@ function renderNowPlayingState(nowPlaying) {
       : "播放器暂未提供进度";
   $("nowPlayingProgress").textContent = progressLine || (ready ? progressUnavailable : "等待播放器进度");
   $("nowPlayingProgress").classList.toggle("is-unavailable", !progressLine);
+  const lyricText = String(nowPlaying.lyric || "").trim();
+  const lyricStatus = showLyrics
+    ? nowPlaying.lyrics_status || "等待同步歌词"
+    : "歌词广播未开启";
+  $("nowPlayingLyric").textContent = lyricText || lyricStatus;
+  $("nowPlayingLyric").title = nowPlaying.lyrics_error || lyricText || lyricStatus;
+  $("nowPlayingLyric").classList.toggle("is-unavailable", !lyricText);
   $("nowPlayingLastUpdate").textContent = `最近检测 ${nowPlaying.last_update || "-"}`;
   $("nowPlayingLastSent").textContent = nowPlaying.last_sent
     ? `最近发送 ${nowPlaying.last_sent}`
@@ -567,6 +624,7 @@ function renderNowPlayingState(nowPlaying) {
   setContentToggle("nowPlayingShowAlbum", showAlbum);
   setContentToggle("nowPlayingShowPlayer", showPlayer);
   setContentToggle("nowPlayingShowProgress", showProgress);
+  setContentToggle("nowPlayingShowLyrics", showLyrics);
 
   const previewParts = [];
   if (showTitle) previewParts.push(`♪ ${nowPlaying.title || "歌名"}`);
@@ -579,11 +637,18 @@ function renderNowPlayingState(nowPlaying) {
   if (showPlayer && (!ready || nowPlaying.player_name)) {
     previewParts.push(`播放器: ${nowPlaying.player_name || "播放器"}`);
   }
-  const previewProgress = showProgress ? progressLine : "";
+  const previewProgress = showProgress
+    ? progressLine || (!ready ? "0:10 ->----- 1:00" : "进度不可用")
+    : "";
   const firstLine = previewParts.length ? `正在播放: ${previewParts.join(" | ")}` : "正在播放:";
-  $("nowPlayingPreview").textContent = previewParts.length || previewProgress
-    ? `${firstLine}${previewProgress ? `\n${previewProgress}` : ""}`
-    : showTitle || showArtist || showAlbum || showPlayer || showProgress
+  const previewLines = [firstLine];
+  if (previewProgress) previewLines.push(previewProgress);
+  if (showLyrics) {
+    previewLines.push(`歌词: ${lyricText || (ready ? lyricStatus : "当前歌词")}`);
+  }
+  $("nowPlayingPreview").textContent = previewParts.length || previewProgress || showLyrics
+    ? previewLines.join("\n")
+    : showTitle || showArtist || showAlbum || showPlayer || showProgress || showLyrics
       ? "所选广播内容暂无可用信息"
       : "请至少选择一项广播内容";
 }
@@ -1099,6 +1164,11 @@ function bindEvents() {
   });
 
   const metricEnabled = (id) => $(id).classList.contains("is-on");
+  const setMetricButton = (id, enabled) => {
+    const button = $(id);
+    button.classList.toggle("is-on", Boolean(enabled));
+    button.setAttribute("aria-pressed", String(Boolean(enabled)));
+  };
   const performancePayload = (enabled) => ({
     enabled,
     interval: numericInputValue("performanceInterval") || 3,
@@ -1161,6 +1231,7 @@ function bindEvents() {
     show_album: metricEnabled("nowPlayingShowAlbum"),
     show_player: metricEnabled("nowPlayingShowPlayer"),
     show_progress: metricEnabled("nowPlayingShowProgress"),
+    show_lyrics: metricEnabled("nowPlayingShowLyrics"),
   });
   const saveNowPlaying = (enabled) =>
     api("/api/now-playing/config", nowPlayingPayload(enabled)).catch(showNowPlayingError);
@@ -1179,6 +1250,7 @@ function bindEvents() {
     "nowPlayingShowAlbum",
     "nowPlayingShowPlayer",
     "nowPlayingShowProgress",
+    "nowPlayingShowLyrics",
   ];
   nowPlayingContentIds.forEach((id) => {
     $(id).addEventListener("click", () => {
@@ -1186,6 +1258,16 @@ function bindEvents() {
       const nextEnabled = !button.classList.contains("is-on");
       button.classList.toggle("is-on", nextEnabled);
       button.setAttribute("aria-pressed", String(nextEnabled));
+      if (id === "nowPlayingShowLyrics" && nextEnabled) {
+        setMetricButton("nowPlayingShowProgress", true);
+      }
+      if (
+        id === "nowPlayingShowProgress"
+        && !nextEnabled
+        && metricEnabled("nowPlayingShowLyrics")
+      ) {
+        setMetricButton("nowPlayingShowLyrics", false);
+      }
       if (!nowPlayingContentIds.some((toggleId) => metricEnabled(toggleId))) {
         button.classList.add("is-on");
         button.setAttribute("aria-pressed", "true");
